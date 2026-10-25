@@ -1,0 +1,148 @@
+# StockSenate 角色定义
+# 角色键（role key）是稳定契约：role_llms、CLI --name、报告字段都引用它。
+# 内置 7 个分析师 + 5 个自定义槽位，合计上限 12（见 DEC-005）。
+
+[roles.market]
+display_name = "市场分析师"
+kind = "analyst"
+alias = ["technical"]
+prompt = "prompts/analysts/market.md"
+tools = ["kline", "quote", "money_flow"]
+output_schema = "AnalystReport"
+enabled = true
+
+[roles.social]
+display_name = "情绪分析师"
+kind = "analyst"
+alias = ["sentiment"]
+prompt = "prompts/analysts/social.md"
+tools = ["social_buzz", "news_search"]
+output_schema = "AnalystReport"
+enabled = true
+
+[roles.news]
+display_name = "新闻分析师"
+kind = "analyst"
+prompt = "prompts/analysts/news.md"
+tools = ["news_search", "announcement"]
+output_schema = "AnalystReport"
+enabled = true
+
+[roles.fundamentals]
+display_name = "基本面分析师"
+kind = "analyst"
+alias = ["basic"]
+prompt = "prompts/analysts/fundamentals.md"
+tools = ["financial", "valuation"]
+output_schema = "AnalystReport"
+enabled = true
+
+[roles.policy]
+display_name = "政策分析师"
+kind = "analyst"
+prompt = "prompts/analysts/policy.md"
+tools = ["policy_feed", "news_search"]
+output_schema = "AnalystReport"
+enabled = true
+
+[roles.hot_money]
+display_name = "游资追踪"
+kind = "analyst"
+prompt = "prompts/analysts/hot_money.md"
+tools = ["dragon_tiger", "money_flow"]
+output_schema = "AnalystReport"
+enabled = true
+
+[roles.lockup]
+display_name = "解禁观察"
+kind = "analyst"
+alias = ["unlock"]
+prompt = "prompts/analysts/lockup.md"
+tools = ["lockup_calendar", "announcement"]
+output_schema = "AnalystReport"
+enabled = true
+
+[roles.bull]
+display_name = "多头研究员"
+kind = "researcher"
+prompt = "prompts/researchers/bull.md"
+tools = []
+output_schema = "ResearchArgument"
+enabled = true
+
+[roles.bear]
+display_name = "空头研究员"
+kind = "researcher"
+prompt = "prompts/researchers/bear.md"
+tools = []
+output_schema = "ResearchArgument"
+enabled = true
+
+[roles.research_manager]
+display_name = "研究经理"
+kind = "manager"
+prompt = "prompts/managers/research_manager.md"
+tools = []
+output_schema = "ResearchVerdict"
+enabled = true
+
+[roles.trader]
+display_name = "交易员"
+kind = "trader"
+prompt = "prompts/trader/trader.md"
+tools = ["kline", "quote"]
+output_schema = "TradePlan"
+enabled = true
+
+[roles.risk_aggressive]
+display_name = "激进风险辩手"
+kind = "risk"
+prompt = "prompts/risk_mgmt/aggressive.md"
+tools = []
+output_schema = "RiskArgument"
+enabled = true
+
+[roles.risk_neutral]
+display_name = "中立风险辩手"
+kind = "risk"
+prompt = "prompts/risk_mgmt/neutral.md"
+tools = []
+output_schema = "RiskArgument"
+enabled = true
+
+[roles.risk_conservative]
+display_name = "保守风险辩手"
+kind = "risk"
+prompt = "prompts/risk_mgmt/conservative.md"
+tools = []
+output_schema = "RiskArgument"
+enabled = true
+
+[roles.portfolio_manager]
+display_name = "投资经理"
+kind = "manager"
+prompt = "prompts/managers/portfolio_manager.md"
+tools = []
+output_schema = "FinalDecision"
+enabled = true
+
+[roles.quality_gate]
+display_name = "质量闸门"
+kind = "judge"
+prompt = "prompts/managers/quality_gate.md"
+tools = []
+output_schema = "QualityVerdict"
+enabled = true
+
+# 自定义角色槽位：启用后计入 12 个角色上限，必须声明 kind 与 output_schema。
+[custom]
+
+[limits]
+max_roles = 12
+max_custom_roles = 5
+
+[tool_permissions]
+# 角色只能看到自己 tools 里列出的域；未列出的域在运行时被拒绝。
+enforce = true
+# 写类工具（下单、改配置）一律不提供给任何角色：本系统不做实盘交易。
+deny_write_tools = true

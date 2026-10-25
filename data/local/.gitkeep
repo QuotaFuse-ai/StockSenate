@@ -1,0 +1,5 @@
+# StockSenate 本地数据目录示例说明
+# 实际数据文件按 data_source.toml 的 layout 组织：
+#   data/local/{domain}/{code}/{date}.json
+# 文本资料（研报、政策原文）放 data/docs/{domain}/，只做定性阅读。
+# 本文件仅作占位，避免空目录在 git 中丢失。

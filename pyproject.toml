@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stocksenate"
+version = "0.1.0"
+description = "StockSenate: multi-role AI investment research senate (analysis and backtest simulation only)"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+authors = [{ name = "QuotaFuse" }]
+keywords = ["a-share", "multi-agent", "investment-research", "llm", "langgraph", "mcp"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Financial and Insurance Industry",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Office/Business :: Financial :: Investment",
+]
+# httpx is intentionally NOT a direct dependency: mootdx pins httpx<0.26 while
+# google-genai needs >=0.28.1. Data access goes through TickHub/Newsieve, so the
+# core never imports httpx; optional integrations declare their own range.
+dependencies = [
+  "typer>=0.12",
+  "rich>=13.7",
+  "pydantic>=2.5",
+  "pydantic-settings>=2.2",
+  "python-dotenv>=1.0",
+  "toml>=0.10",
+]
+
+[project.optional-dependencies]
+stockdata = ["tickhub-cn>=1.0"]
+backtest = ["pandas>=2.0", "numpy>=1.26"]
+mcp = ["mcp>=1.9"]
+webui = ["streamlit>=1.36", "pandas>=2.0"]
+all = [
+  "stocksenate[stockdata,backtest,mcp,webui]",
+]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+  "ruff>=0.6",
+  "mypy>=1.10",
+  "pip-audit>=2.7",
+  "build>=1.2",
+  "twine>=5.0",
+]
+
+[project.scripts]
+ssenate = "stock_senate.cli:main"
+tradingagents = "stock_senate.cli:legacy_main"
+
+[project.urls]
+Homepage = "https://github.com/QuotaFuse-ai/StockSenate"
+Repository = "https://github.com/QuotaFuse-ai/StockSenate"
+Issues = "https://github.com/QuotaFuse-ai/StockSenate/issues"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+stock_senate = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = false
+ignore_missing_imports = true

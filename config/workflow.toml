@@ -1,0 +1,63 @@
+# StockSenate 工作流拓扑
+
+[topology]
+# 固定主干，可增删分析师、可调整辩论轮数，不可跳过终审。
+pipeline = [
+  "analysts",
+  "bull_bear_debate",
+  "research_manager",
+  "trader",
+  "risk_debate",
+  "portfolio_manager",
+]
+# 只允许从这些分析师的报告开始聚合成研究材料。
+analyst_inputs = "all_enabled"
+
+[debate]
+max_debate_rounds = 2
+max_risk_discuss_rounds = 2
+# 收敛判定：连续两轮新增论点占比低于阈值即提前结束。
+convergence_enabled = true
+convergence_min_new_points_ratio = 0.2
+convergence_max_rounds = 5
+
+[hitl]
+enabled = true
+# 允许人工介入的检查点；顺序即执行顺序。
+checkpoints = ["after_trader", "before_final"]
+# 非交互环境（CLI --no-hitl / CI）默认放行，但必须在报告中记录 auto_approved。
+on_timeout = "auto_approve"
+timeout_seconds = 1800
+
+[checkpoint]
+enabled = false
+backend = "sqlite"
+path = "~/.stock_senate/checkpoints.sqlite"
+# 同一 code+date 的断点可恢复，避免重复消耗 LLM 调用。
+resume_by = ["code", "date", "config_hash"]
+
+[incremental]
+# 增量分析：已有同日同标的报告时复用未变化的数据域。
+enabled = true
+reuse_within_seconds = 3600
+invalidate_on = ["announcement", "risk_event"]
+
+[quality_gate]
+enabled = true
+threshold = 70
+# 低于阈值不阻断交付，但决策标记为 low_quality 并要求人工复核。
+block_on_fail = false
+dimensions = ["logic_coherence", "evidence_sufficiency", "citation_accuracy"]
+
+[compression]
+# Map-Reduce 上下文压缩；超过阈值时按证据单元切块。
+enabled = true
+trigger_tokens = 24000
+chunk_tokens = 6000
+keep_citations = true
+
+[budget]
+# 单次分析的调用与时长上限，命中即熔断（见 budget.toml）。
+max_llm_calls = 60
+max_total_tokens = 400000
+max_wall_clock_seconds = 1800

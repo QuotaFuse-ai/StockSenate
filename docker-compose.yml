@@ -1,0 +1,67 @@
+# StockSenate 两服务编排：WebUI 与 MCP 分进程、分端口（DEC-003）。
+# TickHub Admin (8787) 与 TickHub MCP (8000) 属于底座，不在此文件管理。
+
+services:
+  webui:
+    build:
+      context: .
+      args:
+        EXTRAS: all
+    image: stocksenate:latest
+    container_name: stocksenate-webui
+    command: ["webui"]
+    environment:
+      STOCKSENATE_CONFIG_DIR: /app/config-dir
+      STOCKSENATE_DATA_DIR: /app/data
+      STOCKSENATE_WEBUI_PORT: "8788"
+      STOCKSENATE_LOG_LEVEL: INFO
+      TICKHUB_CN_MCP_URL: http://host.docker.internal:8000/mcp
+      NEWSIEVE_MCP_URL: http://host.docker.internal:8002/mcp
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "127.0.0.1:8788:8788"
+    volumes:
+      - ./config:/app/config:ro
+      - stocksenate-data:/app/data
+      - stocksenate-reports:/app/reports
+      - stocksenate-config:/app/config-dir
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8788/_stcore/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  mcp:
+    image: stocksenate:latest
+    container_name: stocksenate-mcp
+    command: ["mcp"]
+    depends_on:
+      webui:
+        condition: service_healthy
+    environment:
+      STOCKSENATE_CONFIG_DIR: /app/config-dir
+      STOCKSENATE_DATA_DIR: /app/data
+      STOCKSENATE_MCP_HOST: 0.0.0.0
+      STOCKSENATE_MCP_PORT: "8765"
+      STOCKSENATE_MCP_TOKEN: ${STOCKSENATE_MCP_TOKEN:-}
+      STOCKSENATE_LOG_LEVEL: INFO
+      TICKHUB_CN_MCP_URL: http://host.docker.internal:8000/mcp
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ./config:/app/config:ro
+      - stocksenate-data:/app/data
+      - stocksenate-config:/app/config-dir
+    restart: unless-stopped
+
+volumes:
+  stocksenate-data:
+  stocksenate-reports:
+  stocksenate-config:

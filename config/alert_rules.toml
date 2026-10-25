@@ -1,0 +1,69 @@
+# StockSenate 告警规则
+# 告警只做提醒与记录，不下单、不修改持仓、不构成投资建议。
+
+[global]
+enabled = true
+# 同一条规则对同一标的的去重窗口（小时）。
+dedup_hours = 12
+# 静默时段内只落库不推送，避开后由队列补发。
+quiet_hours = ["23:30-07:00"]
+# 单条规则单日最多触发次数，防止行情抖动刷屏。
+max_triggers_per_day = 5
+
+[channels.console]
+enabled = true
+level = "info"
+
+[channels.webui]
+enabled = true
+level = "info"
+
+[channels.webhook]
+enabled = false
+url_env = "STOCKSENATE_ALERT_WEBHOOK"
+# 签名与幂等：接收方据此去重并验真。
+secret_env = "STOCKSENATE_ALERT_WEBHOOK_SECRET"
+signature_header = "X-StockSenate-Signature"
+idempotency_header = "X-StockSenate-Idempotency-Key"
+max_retries = 3
+backoff_seconds = [2, 10, 30]
+
+[[rules]]
+id = "price_limit_up"
+name = "涨停/跌停"
+level = "high"
+when = "quote.change_pct >= 9.8 or quote.change_pct <= -9.8"
+cooldown_minutes = 60
+channels = ["console", "webui"]
+
+[[rules]]
+id = "volume_spike"
+name = "放量异动"
+level = "mid"
+when = "kline.volume_ratio_5d >= 2.5"
+cooldown_minutes = 240
+channels = ["console", "webui"]
+
+[[rules]]
+id = "announcement_risk"
+name = "公告风险事件"
+level = "high"
+when = "risk_event.severity == 'high'"
+cooldown_minutes = 0
+channels = ["console", "webui", "webhook"]
+
+[[rules]]
+id = "lockup_expiry"
+name = "解禁临近"
+level = "mid"
+when = "lockup_calendar.days_to_expiry <= 5"
+cooldown_minutes = 1440
+channels = ["webui"]
+
+[[rules]]
+id = "data_degraded"
+name = "数据源降级"
+level = "low"
+when = "data_envelope.data_source_status != 'ok'"
+cooldown_minutes = 120
+channels = ["console"]

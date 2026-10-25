@@ -1,0 +1,484 @@
+QuotaFuse Council 完整开发文档 v1.1（正式交付版）
+产品名：QuotaFuse Council
+中文名：QuotaFuse 多角色投研合议系统
+PyPI 包名：quota-fuse-council
+Python 包：qf_council
+CLI 主命令：qfc
+CLI 长别名：quota-fuse-council
+入口：qf_council.cli:main
+数据底座：QuotaFuse StockData
+定位：只做投研分析 + 回测推演，不做实盘交易下单，不输出自动交易指令。
+文档依据：原 TradingAgents‑astock 仓库代码与 README、QuotaFuse StockData 开发文档、MCP 规范及相关官方文档 [R1][R2][R3][R4][R5]。
+说明：文中 [R1] 等编号对应第十八章“参考链接汇总”。发布前需逐项核验链接、许可证、PyPI 名称和命令占用情况；这些属于上线核验项，不是架构设计疑问。
+一、项目基础信息
+1.1 项目定位
+QuotaFuse Council 是 simonlin1212/TradingAgents-astock 的原地重写增强版 [R1]：
+原版 7 角色、多空辩论、研究经理、交易员、三档风险辩论、投资经理终审完整保留；
+原版 CLI、Streamlit WebUI、Python API、报告输出、LangGraph checkpoint 完整保留；
+原版全部 Issue 逐项解决；
+新增 17 项企业级能力；
+数据采集统一交给 QuotaFuse StockData，不在本组件重复实现采集、缓存、代理池、降级 [R2]；
+支持 StockData 与本地 JSON/文档/TXT/数据库可插拔、可混合、可实时采集；
+支持全部 LLM 提供商，同一 Python 环境直接安装。
+1.2 命名与兼容策略
+项<w:t>新值<w:t>兼容策略
+包名<w:t>quota-fuse-council<w:t>保留 quota-fuse-trading-agent 过渡元包，安装时提示迁移
+Python 包<w:t>qf_council<w:t>保留旧包名 shim，过渡期可用
+CLI<w:t>qfc<w:t>同时注册旧命令 tradingagents，打印弃用警告
+Python API<w:t>CouncilGraph<w:t>保留 TradingAgentsGraph 别名，propagate 签名不变
+配置目录<w:t>~/.qf_council/<w:t>首次启动自动迁移 ~/.tradingagents/，旧目录只读保留
+环境变量<w:t>QF_COUNCIL_*<w:t>兼容读取旧前缀，新前缀优先
+MCP Server 名<w:t>qf-council<w:t>与 StockData MCP 分开命名、鉴权、日志
+Docker 服务名<w:t>qf-council<w:t>与 stockdata 服务分离
+1.3 与 StockData 的职责边界
+能力<w:t>QuotaFuse Council<w:t>QuotaFuse StockData
+多角色分析、辩论、终审<w:t>✅<w:t>❌
+回测、告警、报告<w:t>✅<w:t>❌
+数据采集、缓存、代理池<w:t>❌ 不重复实现<w:t>✅
+字段映射、风险事件结构化<w:t>消费<w:t>✅ 生产
+数据源健康与降级<w:t>消费状态<w:t>✅ 执行
+LLM 调用与多模型<w:t>✅<w:t>仅 Crawl4AI 可选清洗
+设计理由：
+避免重复建设：采集、缓存、代理池是 StockData 的核心能力，Council 再建一套只会增加维护成本和故障点。
+单一数据真相源：风险事件、字段映射由 StockData 统一生产和定义，Council 只消费结构化结果，保证多角色拿到的数据一致。
+职责分离：健康检查、熔断、切源由 StockData 执行；Council 读取 data_source_status、source、freshness 并据此标注报告缺口和置信度，不重复维护状态机。
+可替换性：只要 StockData 输出契约稳定，Council 不关心底层是东财、巨潮还是通达信；更换数据源不影响上层分析逻辑。
+原则：Council 不直连东财/巨潮/通达信，所有行情、财报、公告、研报、资金、风险事件统一经 DataAccessLayer 向 StockData 或本地 Provider 获取 [R2]。
+二、原仓库代码核对结论
+对照 simonlin1212/TradingAgents-astock 代码与 README，改造清单大部分吻合，但正式文档需修正以下细节。
+2.1 吻合项
+7 角色分析师、多空辩论、研究经理、交易员、三档风险辩论、投资经理终审流程存在；
+A 股规则适配：T+1、涨跌停、最小手数、交易时段、ST 标记、CSI300 基准；
+快思考/深思考双模型分层，支持多 LLM 提供商；
+performance 命令存在，用于已保存决策的事后归因统计；
+Claude Agent SDK 订阅模式存在；
+东财节流 EM_MIN_INTERVAL、mootdx 数据源存在；
+httpx 依赖冲突在历史记录中出现，需彻底解决。
+2.2 必须修正的细节
+propagate 返回结构
+原版 propagate 返回 (final_state, decision) 元组。改造后必须保持该返回值签名不变；summary.json、complete_report.md 是衍生输出，不是替代返回值。验收时需做返回值契约测试。
+角色模型配置粒度
+原版已支持 role_llms 细粒度配置，可为单个角色指定不同供应商模型。Council 必须继承并兼容该能力，不能只保留“快思考/深思考”两级。
+performance 不是回测
+原版 README 明确说明该功能是决策事后归因统计，不是回测、不是策略业绩。Council 文档中“完整回测引擎”是新增能力，必须与 performance 分开描述、分开验收，不能混为一谈。
+数据获取是内建模式，迁移是架构重构
+原版自带 A 股数据供应商并直连免费源。Council 将其迁移到 StockData 底座属于架构重构，不是简单新增功能；需评估对原数据质量测试的影响，并保留迁移期兼容开关。
+项目定位是研究框架，不是产品
+原版强调面向研究与教学、不构成投资建议、不产出可执行价位。Council 对外表述必须延续该边界，避免用户产生“荐股”预期。
+三、总体架构
+text
+┌─────────────────────────────────────────────────────────┐
+│ 调用层：CLI │ Streamlit WebUI │ Python API │ MCP Server  │
+└─────────────────────────────────────────────────────────┘
+                          │
+┌─────────────────────────────────────────────────────────┐
+│ 工作流与角色层                                           │
+│ 默认7角色 → 多空辩论 → 研究经理 → 交易员                 │
+│ → 三档风险辩论 → 投资经理终审 → 报告/告警/回测           │
+│ LangGraph 拓扑可配置 + checkpoint + interrupt [R5]       │
+└─────────────────────────────────────────────────────────┘
+                          │
+┌─────────────────────────────────────────────────────────┐
+│ 数据访问层 DataAccessLayer                               │
+│ 统一 DataEnvelope 契约 + 路由 + 溯源 + 降级标记          │
+│ StockDataProvider │ JsonFileProvider │ TextDocProvider   │
+│ SqlProvider       │ CompositeProvider                    │
+└─────────────────────────────────────────────────────────┘
+                          │
+┌─────────────────────────────────────────────────────────┐
+│ QuotaFuse StockData 底座                                 │
+│ 采集 / 缓存 / 字段映射 / 代理池 / 降级 / 风险事件 [R2]   │
+└─────────────────────────────────────────────────────────┘
+四、原版能力 100% 复现清单
+原版能力<w:t>复现要求<w:t>验收方式
+7 角色分析师：基本面/技术面/情绪/新闻/政策/游资龙虎榜/解禁监控<w:t>角色逻辑不改<w:t>角色输出 schema 回归
+多空辩论 + 研究经理综合 + 交易员规划 + 三档风险辩论 + 投资经理终审<w:t>完整复现<w:t>工作流节点快照对比
+快思考/深思考双模型分层 + role_llms 细粒度配置<w:t>保留并兼容<w:t>配置迁移与切换测试
+全部 LLM 提供商：MiniMax、DeepSeek、Qwen、GLM、OpenAI、Anthropic、Google、xAI、OpenRouter、Ollama、OpenAI 兼容网关<w:t>全部保留<w:t>同一环境 import smoke test [R19]
+LangGraph checkpoint 断点持久<w:t>保留<w:t>中断恢复测试 [R5]
+CLI + Streamlit WebUI<w:t>保留，交互不改<w:t>UI 回归 [R6]
+Python API TradingAgentsGraph.propagate(code, date)<w:t>对外接口不变，返回 (final_state, decision)<w:t>契约测试
+summary.json + complete_report.md<w:t>保留并扩展字段<w:t>字段兼容测试
+Markdown/PDF 报告导出<w:t>保留<w:t>导出测试
+WebUI 历史记录<w:t>升级为结构化版本快照<w:t>快照读写测试
+东财节流 EM_MIN_INTERVAL<w:t>交给 StockData 统一管控<w:t>配置透传测试
+mootdx TCP 7709<w:t>StockData 内部适配<w:t>数据一致性测试 [R15]
+A 股规则：T+1、涨跌停、最小手数、交易时段、ST、CSI300 基准<w:t>全部保留<w:t>规则单测
+v0.5.2 performance summary<w:t>完整保留，定位为事后归因，不混同回测<w:t>统计口径测试
+Claude Agent SDK 订阅模式<w:t>保留<w:t>订阅模式联调 [R20]
+~/.tradingagents/llm_config.json<w:t>保留，与 toml 合并，自动迁移<w:t>配置迁移测试
+五、原版 Issue 100% 解决方案
+5.1 Issue 102：多数据源同时失败
+DataAccessLayer 统一读取 StockData 的 data_source_status、source、freshness [R2]；
+单源失败不影响其他角色；缺失数据标记 missing/degraded；
+报告与告警中展示数据缺口；
+验收：模拟东财超时、巨潮空数据，分析流程不中断，报告标注降级。
+5.2 Issue 105①：回测残缺 → 完整回测引擎
+Streamlit 新增回测页面 [R6]；
+滑点、手续费、仓位、重叠窗口控制；
+收益曲线、方向准确率、alpha 分组、Buy→Sell alpha 衰减；
+基于已保存决策记录自动回测；
+data_as_of 历史时点推演，防未来函数；
+回测数据优先本地归档，缺失走 StockData。
+5.3 Issue 105②：告警条件不完整 → 完整告警体系
+规则引擎：级别 high/mid/low，条件、动作、去重；
+触发条件：解禁临近、减持、预亏、商誉减值、监管处罚、政策利空、评级下调；
+动作：结构化 JSON + WebUI 面板 + Webhook；
+去重：同标的同类型 N 小时不重复；
+依赖 StockData 结构化风险事件字段。
+5.4 Issue 105③：选股代码重复 → 统一去重
+合并为一份 screening 模块；
+统一走 StockData MCP 批量查询 [R3][R4]；
+删除重复实现，保留兼容入口；
+验收：同一筛选条件结果一致，代码路径唯一。
+5.5 httpx 依赖冲突 → 彻底解决
+建立依赖兼容矩阵；
+优先升级 mootdx / Gemini SDK 到兼容 httpx 版本；
+无法升级时做最小 patch，并记录 patch 维护策略；
+CI 增加“全提供商同环境安装 + import smoke test” [R22]；
+验收：同一 venv 安装全部 LLM SDK 后，import 和基础调用通过。
+5.6 弱模型 tool-calling 空报告 → Pydantic Schema 强约束
+每个节点绑定 Pydantic 输出模型 [R7]；
+校验失败只重试当前节点，不回滚全局；
+重试次数、退避、降级标记可配置；
+多次失败允许带局部缺陷继续，报告标注 partial；
+验收：弱模型跑通流程，空报告率显著下降，降级可追踪。
+5.7 30~50 次 LLM 调用 → 增量分析
+新标的：保留完整流程；
+重复标的：只对比新增数据，历史结论摘要注入；
+新增数据定义：新公告、新财报、新 K 线、新风险事件；
+目标：后续增量调用减少 60%~80%；
+验收：同一标的二次分析 token 统计对比，结论一致性抽检。
+5.8 配置分散 → 统一 toml
+agent_roles.toml：角色、提示词、权重、工具白名单；
+workflow.toml：拓扑、终止条件、辩论轮次；
+output_template.toml：输出模块开关；
+llm_config.toml：与 ~/.qf_council/llm_config.json 合并，兼容旧 JSON；
+所有配置提供 JSON Schema 校验和迁移脚本。
+5.9 日志弱 → 结构化日志
+stdout/stderr 分离；MCP stdio 模式 stdout 绝对纯净 [R3]；
+记录原始数据引用、LLM 输入输出摘要、Token、节点耗时、风险标记、trace_id；
+支持 file/sqlite/mysql/postgres [R23]；
+敏感字段脱敏。
+5.10 无 CI → 补全 CI
+GitHub Actions：pytest + pip-audit + ruff/mypy [R22][R13][R11][R12]；
+PR 必跑；主干保护；
+增加依赖兼容 job 和打包 job。
+5.11 无 lock file → 依赖锁定
+使用 uv.lock 或 requirements-lock.txt [R9]；
+CI 使用 lock 安装；
+发布包声明最小依赖范围，lock 仅用于开发复现。
+5.12 英文文档不一致 → 修复
+统一英文 README；
+订阅模式说明中英文对齐；
+文档纳入 CI 链接检查。
+六、新增功能与里程碑映射
+#<w:t>新增功能<w:t>里程碑<w:t>章节
+1<w:t>对接 StockData 三模式<w:t>M0<w:t>第七章
+2<w:t>Pydantic Schema + 单节点局部重试<w:t>M1<w:t>5.6
+3<w:t>辩论智能收敛打分 + 阈值<w:t>M1<w:t>第九章
+4<w:t>增量分析<w:t>M1<w:t>第十四章
+5<w:t>角色配置化 + 自定义角色扩展<w:t>M1<w:t>第八章
+6<w:t>事实交叉核验钩子<w:t>M4<w:t>第九章
+7<w:t>报告版本快照 + Diff<w:t>M2<w:t>第十四章
+8<w:t>任务分级熔断<w:t>M1<w:t>第十五章
+9<w:t>工作流拓扑可配置<w:t>M1<w:t>第九章
+10<w:t>终止规则 + 人工介入工单<w:t>M3<w:t>第九章
+11<w:t>MCP Server（stdio/http）<w:t>M3<w:t>第十章
+12<w:t>角色工具权限隔离<w:t>M1<w:t>第八章
+13<w:t>批量任务队列<w:t>M3<w:t>第十五章
+14<w:t>多格式输出<w:t>M2<w:t>第十四章
+15<w:t>结构化风险信号 + 告警引擎<w:t>M2<w:t>第十三章
+16<w:t>完整回测引擎 + Web 界面<w:t>M2<w:t>第十二章
+17<w:t>PyPI 标准包发布<w:t>M3<w:t>第十六章
+七、数据源可插拔与 StockData 对接
+7.1 设计结论
+不是“二选一硬编码”，而是 可插拔 DataProvider + 统一数据契约 + 可配置路由 + 全量溯源。支持纯 StockData、纯本地数据、优先级 fallback、混合模式、实时 StockData 采集。
+7.2 DataProvider 组成
+text
+TradingAgent 上层
+   → DataAccessLayer（统一 DataEnvelope + 路由 + 溯源）
+       ├── StockDataProvider：MCP stdio/http 或 local import
+       ├── JsonFileProvider：本地 JSON 归档
+       ├── TextDocProvider：TXT/MD/PDF/Word，仅文本分析
+       ├── SqlProvider：SQLite/MySQL/Postgres，只读优先
+       └── CompositeProvider：按优先级/字段级路由
+7.3 统一数据契约 DataEnvelope
+python
+class DataEnvelope(BaseModel):
+    domain: str          # kline / financial / announcement / risk_event ...
+    code: str
+    data_as_of: date
+    payload: dict
+    source: str          # stockdata / json / text_doc / sql
+    source_detail: str
+    fetched_at: datetime
+    freshness: str       # realtime / cached / archive
+    confidence: str      # high / medium / low
+    data_source_status: str  # ok / degraded / missing
+上层角色只消费 payload，同时可读取溯源信息。报告标注数据来源和新鲜度。
+7.4 路由配置 data_source.toml
+toml
+[data_source]
+mode = "hybrid"        # stockdata | local | hybrid | priority
+realtime_enable = true
+realtime_timeout_sec = 30
+realtime_fallback_to_local = true
+local_root = "./data/local"
+[data_source.sql]
+enable = false
+url = "sqlite:///./data/trading.db"
+readonly = true
+[data_source.priority]
+kline = ["stockdata", "sql"]
+financial = ["stockdata", "sql"]
+announcement = ["stockdata", "local_json", "text_doc"]
+research = ["stockdata", "text_doc"]
+risk_event = ["stockdata", "sql"]
+模式语义：
+stockdata：只用 StockData；
+local：只用本地数据，支持离线回放；
+priority：按列表逐级 fallback；
+hybrid：历史/归档优先本地，实时/缺失/刷新走 StockData。
+7.5 实时使用 StockData 采集
+运行形态<w:t>调用方式
+独立进程/单机<w:t>stdio MCP 子进程 [R3][R4]
+多 Agent/局域网<w:t>http MCP，带鉴权 [R3]
+同进程嵌入<w:t>local import，注意阻塞风险
+CLI/定时任务<w:t>qf-stockdata CLI 或 MCP tool call
+关键规则：
+realtime_enable=true 才允许分析中触发实时抓取；
+先查缓存，未命中再采集；
+分析开始前批量预取 K 线、财报、公告、风险事件；
+实时超时自动 fallback 本地/缓存，标记 degraded；
+多 Agent 并发依赖 StockData 防重复采集锁；
+返回 freshness=realtime|cached|archive；
+单类数据失败不阻塞整个流程，报告注明缺口。
+7.6 本地数据接入
+JSON：data/local/{domain}/{code}/{date}.json，schema 校验，适合离线回放和测试；
+TXT/MD/PDF/Word：仅用于公告、研报、政策、新闻文本分析，可选用 Crawl4AI 清洗 [R18]；禁止从文本抽取财务数值、K 线、资金数值；
+数据库：SQLite/MySQL/Postgres，只读优先，表映射和查询模板化 [R23]，适合回测库、决策记录库、历史归档库。
+7.7 边界约束
+数值类数据只允许来自 StockData 或结构化数据库；
+文本类数据只用于分析和清洗，不参与数值抽取；
+实时采集默认关闭，开启后必须有超时、降级、防重复锁；
+所有数据必须带溯源元信息；
+本地源不可用不得静默返回空，必须标记 data_source_status。
+7.8 验收标准
+mode=stockdata 不依赖本地数据可完成分析；
+mode=local 断网可完成分析；
+mode=hybrid 本地历史 + StockData 实时增量可混合；
+实时超时能 fallback 并标注 degraded；
+并发分析不重复采集；
+文本数据不会被用于财务数值；
+每条数据可追溯来源和抓取时间；
+回测使用本地归档时结果可复现。
+八、角色体系：默认 7 角色 + 自定义角色
+8.1 默认角色
+基本面、技术面、情绪、新闻、政策、游资龙虎榜、解禁监控，全部保留原版逻辑。
+8.2 角色定义 agent_roles.toml
+toml
+[roles.basic]
+name = "基本面分析师"
+enable = true
+weight = 1.0
+prompt_file = "prompts/basic.md"
+tools = ["get_finance_report", "get_stock_info", "get_shareholder"]
+output_schema = "BasicAnalysis"
+model_tier = "deep"
+stage = "analyst"
+participate_in_debate = true
+max_retries = 2
+builtin = true
+[roles.custom_macro]
+name = "宏观策略分析师"
+enable = false
+weight = 0.8
+prompt_file = "prompts/macro.md"
+tools = ["get_macro_data", "get_policy_news", "get_index_kline"]
+output_schema = "MacroAnalysis"
+model_tier = "deep"
+stage = "analyst"
+participate_in_debate = true
+max_retries = 2
+builtin = false
+新增角色必须定义六件事：名称与提示词、工具白名单、Pydantic 输出 Schema [R7]、模型层级、阶段、是否参与辩论及权重。
+8.3 工作流接入 workflow.toml
+toml
+[[workflow.nodes]]
+id = "custom_macro"
+role = "custom_macro"
+type = "analyst"
+parallel_group = "analyst_round_1"
+[[workflow.edges]]
+from = "custom_macro"
+to = "debate_bull"
+规则：
+analyst 阶段角色默认并行执行；
+新增角色不改变默认 7 角色拓扑；
+新增角色若参与辩论，必须显式声明边；
+辅助分析可只输出到报告附录；
+节点 id 必须与 roles key 对应。
+8.4 数量与预算约束
+默认角色上限 12 个（7 内置 + 5 自定义），可配置；
+新增角色计入任务熔断的 LLM 调用次数和 Token 预算；
+超限时配置校验报错；
+自定义角色失败可跳过，不阻塞主流程，报告标注 partial。
+8.5 工具权限隔离
+每个角色只能调用白名单内工具；
+StockData 工具按角色授权；
+越权调用返回结构化错误并审计；
+自定义角色默认只读；
+白名单变更需审计。
+8.6 验收标准
+默认 7 角色行为不变；
+新增自定义角色后 qfc analyze 可运行；
+角色可启停、调权重；
+越权调用被拒绝并审计；
+Schema 校验失败只重试当前节点；
+新增角色后默认 7 角色回归通过；
+超上限配置报错；
+自定义角色失败不阻塞主流程。
+九、工作流与配置
+workflow.toml 定义并行、串行、分支、汇聚、辩论轮次、收敛阈值、终止条件、interrupt 节点；
+辩论智能收敛：每轮输出分数，达到阈值提前结束，记录终止原因；
+事实交叉核验钩子：数值结论必须来自结构化数据，文本结论标注来源，冲突标记 conflict；
+人工介入工单：LangGraph interrupt 可配置，工单存储、通知、恢复、超时、权限、审计 [R5]；
+配置统一 toml，提供 JSON Schema 校验和迁移脚本。
+十、MCP Server 设计
+双传输：stdio / Streamable HTTP [R3][R4]；
+stdio 模式 stdout 只输出 MCP 协议报文，日志走 stderr；
+暴露工具：分析任务、回测、告警查询、报告查询、配置查询；
+与 StockData MCP 分开命名、分开鉴权、分开日志，通过 trace_id 串联；
+http 模式默认 127.0.0.1，对外必须鉴权；
+验收：至少一个 MCP 客户端能列出并调用工具。
+十一、CLI 与 Python API
+bash
+qfc analyze 600000 --date 2024-12-31
+qfc analyze 600000 --date 2024-12-31 --disable custom_macro
+qfc analyze 600000 --date 2024-12-31 --enable custom_macro --weight 0.6
+qfc role list
+qfc role show basic
+qfc role validate
+qfc role enable custom_macro
+qfc role disable custom_macro
+qfc backtest run --code 600000 --start 2024-01-01 --end 2024-12-31
+qfc alert list
+qfc alert rules validate
+qfc report diff --code 600000 --from 2024-11-30 --to 2024-12-31
+qfc queue status
+qfc queue submit --file tasks.csv
+qfc mcp stdio
+qfc mcp http --port 8765
+qfc config validate
+qfc config migrate
+Python API：
+CouncilGraph.propagate(code, date) 为主类；
+保留 TradingAgentsGraph 别名，propagate 签名和返回 (final_state, decision) 不变；
+CLI 输出 json/table/csv，结果走 stdout，日志走 stderr；
+退出码：0 成功、2 参数错误、3 配置错误、4 数据源不可用、7 限流、8 部分失败。
+十二、完整回测引擎
+数据模型：decision_record、backtest_run、backtest_trade、backtest_position、backtest_metric、price_series、benchmark_series。
+功能：滑点、手续费、仓位、重叠窗口控制；收益曲线、方向准确率、alpha 分组、Buy→Sell alpha 衰减；基于已保存决策自动回测；data_as_of 历史时点推演；回测数据优先本地归档，缺失走 StockData；Streamlit 回测页面 [R6]。
+验收：固定数据集可复现、无未来函数、参数生效、无样本泄漏、报告与 WebUI 一致。注意：performance 是事后归因，不是回测，二者分开验收。
+十三、告警规则引擎
+toml
+[[alert.rule]]
+id = "unlock_near"
+level = "high"
+condition = "risk_event.type == 'unlock' and days_to_unlock <= 30"
+action = ["json", "webui", "webhook"]
+dedup_hours = 24
+能力：high/mid/low；条件覆盖解禁、减持、预亏、商誉、处罚、政策利空、评级下调；动作 JSON + WebUI + Webhook；去重；状态机触发/确认/恢复/静默；Webhook 重试、签名、幂等；依赖 StockData 风险事件字段。
+验收：规则可配置、去重生效、Webhook 可重试、告警与报告一致。
+十四、报告、增量分析与多格式输出
+报告版本快照：每次分析保存结构化快照；
+Diff 对比：字段级差异、结论变化、风险变化；
+增量分析：新标的完整流程；重复标的只拉新增数据并注入历史结论摘要；
+多格式输出：精简结论、完整辩论、风险清单、Diff 摘要；
+验收：二次分析 token 显著下降，Diff 可读，输出格式可切换。
+十五、任务熔断与批量队列
+任务分级熔断：最大调用次数、最大 Token、超时优雅退出；
+批量队列：并发控制、限速、失败重试/跳过、进度查询；
+与 StockData 限流、缓存、防重复锁协同；
+验收：批量任务可暂停/恢复/取消，失败可追踪。
+十六、PyPI 发布与依赖
+包名：quota-fuse-council；
+pyproject.toml 标准打包 [R10]；
+可选依赖：stockdata、backtest、mcp、all；
+发布：python -m build + twine upload [R10][R21]；
+lock：uv.lock 或 requirements-lock.txt [R9]；
+CI：pytest + pip-audit + lint + 全依赖 import smoke test [R13][R11][R12][R22]；
+验收：干净环境 pip install quota-fuse-council 后 CLI 和 Python API 可用。
+十七、测试、部署、边界与里程碑
+17.1 测试类型
+原版回归、StockData 联调、数据源可插拔、弱模型降级、增量分析、回测正确性、告警、依赖兼容、CI/lock、MCP、安全、自定义角色回归、旧命令兼容、配置迁移。
+17.2 关键验收项
+原版用户升级零改动；
+原版 100% 能力回归通过；
+Issue 102/105 全场景通过；
+17 项新增逐项验收；
+实时 StockData 采集可超时降级；
+文本数据不参与数值抽取；
+MCP stdio stdout 纯净；
+回测结果可复现；
+告警去重生效；
+干净环境 pip 安装可用；
+自定义角色可运行且超限报错；
+旧命令和旧导入可用；
+配置自动迁移通过。
+17.3 部署
+Docker Compose 启动 qf-council、webui、redis，可选 stockdata、日志库 [R25]；监控分析耗时、LLM 调用、Token、节点失败率、数据源降级率、回测任务数、告警数；日志支持 file/sqlite/mysql/postgres；配置变更审计和回滚。
+17.4 边界约束
+只做投研分析 + 回测推演，不做实盘交易下单，不输出自动交易指令；
+财务、K 线、资金数值只来自 StockData 或结构化数据库，绝不从 TXT/文档 AI 抽取；
+文本类数据仅用于公告、研报、政策、新闻分析；
+增强模块带开关，关闭零开销；
+实时采集默认关闭，开启后必须有超时、降级、防重复锁；
+所有数据带溯源元信息；
+MCP stdio stdout 只输出协议报文；
+“100% 复现/解决”以接口契约和回归测试验收；
+原仓库许可证与兼容实现边界需确认；
+不重复实现 StockData 的采集、缓存、代理池、降级能力。
+17.5 里程碑
+里程碑<w:t>内容<w:t>验收
+M0 兼容基线<w:t>原版 100% 复现；StockData 三模式；DataProvider 可插拔；依赖冲突根治；CI/lock；英文文档修复<w:t>原版回归；stockdata/local/hybrid 可用
+M1 质量稳定<w:t>Pydantic Schema + 局部重试；配置统一；结构化日志；增量分析；角色配置化 + 自定义角色；辩论收敛；工具权限隔离；任务熔断<w:t>弱模型跑通；增量 token 下降；角色扩展可用
+M2 回测告警<w:t>回测引擎 + Web；告警引擎；报告快照 + Diff；多格式输出；风险信号<w:t>回测可复现；告警去重；Diff 可读
+M3 平台化<w:t>MCP Server；批量队列；拓扑可配置；人工工单；PyPI 发布；旧包兼容迁移<w:t>MCP 联调；批量可控；pip 安装可用
+M4 增强<w:t>事实交叉核验；体验优化；文档固化<w:t>冲突可标记；文档完整
+十八、参考链接汇总
+编号<w:t>名称<w:t>链接<w:t>用途
+R1<w:t>原 TradingAgents-astock 仓库<w:tab/><w:t xml:space="preserve">https://github.com/simonlin1212/TradingAgents-astock<w:t>原版能力与 Issue 对齐
+R2<w:t>QuotaFuse StockData 参考仓库<w:tab/><w:t xml:space="preserve">https://github.com/simonlin1212/a-stock-data<w:t>StockData 兼容参考
+R3<w:t>Model Context Protocol 规范<w:tab/><w:t xml:space="preserve">https://modelcontextprotocol.io/<w:t>MCP 协议
+R4<w:t>MCP Python SDK<w:tab/><w:t xml:space="preserve">https://github.com/modelcontextprotocol/python-sdk<w:t>MCP Python 实现
+R5<w:t>LangGraph<w:tab/><w:t xml:space="preserve">https://langchain-ai.github.io/langgraph/<w:t>工作流、checkpoint、interrupt
+R6<w:t>Streamlit<w:tab/><w:t xml:space="preserve">https://streamlit.io/<w:t>WebUI 与回测页面
+R7<w:t>Pydantic<w:tab/><w:t xml:space="preserve">https://docs.pydantic.dev/<w:t>Schema 校验
+R8<w:t>Typer<w:tab/><w:t xml:space="preserve">https://typer.tiangolo.com/<w:t>CLI
+R9<w:t>uv<w:tab/><w:t xml:space="preserve">https://docs.astral.sh/uv/<w:t>依赖锁定
+R10<w:t>Python Packaging<w:tab/><w:t xml:space="preserve">https://packaging.python.org/<w:t>pyproject / 打包发布
+R11<w:t>pip-audit<w:tab/><w:t xml:space="preserve">https://pypi.org/project/pip-audit/<w:t>依赖安全审计
+R12<w:t>Ruff<w:tab/><w:t xml:space="preserve">https://docs.astral.sh/ruff/<w:t>lint
+R13<w:t>pytest<w:tab/><w:t xml:space="preserve">https://docs.pytest.org/<w:t>测试
+R14<w:t>akShare<w:tab/><w:t xml:space="preserve">https://akshare.akfamily.xyz/<w:t>数据源参考
+R15<w:t>mootdx<w:tab/><w:t xml:space="preserve">https://github.com/betterquant2/mootdx<w:t>通达信数据源，发布前核验
+R16<w:t>Redis<w:tab/><w:t xml:space="preserve">https://redis.io/docs/latest/<w:t>缓存
+R17<w:t>APScheduler<w:tab/><w:t xml:space="preserve">https://apscheduler.readthedocs.io/<w:t>定时任务
+R18<w:t>Crawl4AI<w:tab/><w:t xml:space="preserve">https://github.com/unclecode/crawl4ai<w:t>可选文本清洗
+R19<w:t>LiteLLM<w:tab/><w:t xml:space="preserve">https://docs.litellm.ai/<w:t>多模型网关参考
+R20<w:t>Claude Agent SDK<w:tab/><w:t xml:space="preserve">https://docs.anthropic.com/en/api/agent-sdk/overview<w:t>订阅模式，发布前核验
+R21<w:t>PyPI<w:tab/><w:t xml:space="preserve">https://pypi.org/<w:t>包发布
+R22<w:t>GitHub Actions<w:tab/><w:t xml:space="preserve">https://docs.github.com/en/actions<w:t>CI
+R23<w:t>SQLAlchemy<w:tab/><w:t xml:space="preserve">https://docs.sqlalchemy.org/<w:t>多数据库落库参考
+R24<w:t>OpenTelemetry<w:tab/><w:t xml:space="preserve">https://opentelemetry.io/<w:t>可观测性可选
+R25<w:t>Docker Compose<w:tab/><w:t xml:space="preserve">https://docs.docker.com/compose/<w:t>部署
+十九、上线前核验项（非设计疑问）
+核验 quota-fuse-council、qf-council、qfc 在 PyPI 和系统命令中是否可用；
+核验原仓库许可证与兼容实现边界，避免直接复制受限代码和文档；
+核验 R15、R20 等参考链接发布时是否仍有效；
+确认旧包名 quota-fuse-trading-agent 过渡期保留时长；
+确认自定义角色默认上限 12 是否适合目标用户；
+在真实 MCP 客户端中完成 stdio/http 联调；
+在干净环境完成 pip install quota-fuse-council 和全依赖 import smoke test。

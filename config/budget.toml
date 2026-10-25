@@ -1,0 +1,40 @@
+# StockSenate 预算与熔断
+# 目的：单次分析、单条队列任务、单个项目的花费都有硬上限，命中即停止并留痕。
+
+[per_run]
+max_llm_calls = 60
+max_input_tokens = 300000
+max_output_tokens = 100000
+max_wall_clock_seconds = 1800
+# 命中后行为：stop（停止并交付部分结果）| fail（直接失败）
+on_exceed = "stop"
+
+[per_queue]
+max_llm_calls = 1200
+max_total_tokens = 8000000
+max_wall_clock_seconds = 28800
+
+[daily]
+max_llm_calls = 3000
+max_total_tokens = 20000000
+# 0 表示不设金额上限；填了金额需要配置单价表。
+max_cost_cny = 0
+
+[circuit_breaker]
+enabled = true
+# 连续失败次数达到阈值即熔断，防止在坏 provider 上无限重试。
+failure_threshold = 5
+# 熔断后保持打开的秒数，指数退避，上限 max_open_seconds。
+open_seconds = 60
+max_open_seconds = 900
+half_open_probes = 1
+
+[pricing]
+# 单价表用于金额估算，按 provider/model 配置（每千 token，人民币）。
+table = {}
+
+[reporting]
+# 每次运行结束写一条用量记录，供 performance 与预算审计读取。
+record_usage = true
+store = "sqlite"
+path = "~/.stock_senate/usage.sqlite"

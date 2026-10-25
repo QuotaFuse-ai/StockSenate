@@ -1,0 +1,79 @@
+# StockSenate 数据源路由
+# 本组件不实现采集、缓存、代理池与降级：那是 TickHub 底座 / Newsieve 的职责。
+
+[global]
+# stockdata | local | hybrid | priority
+mode = "priority"
+# 允许跨 Provider 回退，但每次回退都必须在 DataEnvelope.source_detail 留痕。
+allow_fallback = true
+# 数据缺失即明确报 missing，禁止用模型记忆补数值。
+forbid_llm_fill = true
+default_timeout_seconds = 20
+max_retries = 2
+
+[providers.tickhub_cn]
+kind = "mcp"
+package = "tickhub-cn"
+command = "th-cn"
+transport = "stdio"
+# 本地已装 tickhub_cn 时优先直连 import，避免子进程开销。
+prefer_local_import = true
+domains = ["kline", "quote", "financial", "announcement", "research", "money_flow", "dragon_tiger", "lockup_calendar", "risk_event"]
+
+[providers.tickhub_us]
+kind = "mcp"
+package = "tickhub-us"
+command = "th-us"
+transport = "stdio"
+domains = ["kline", "quote", "financial", "announcement", "risk_event"]
+
+[providers.newsieve]
+kind = "mcp"
+package = "newsieve"
+command = "nsv"
+transport = "stdio"
+domains = ["news", "social_buzz", "policy_feed"]
+
+[providers.local_json]
+kind = "json_file"
+root = "data/local"
+layout = "{domain}/{code}/{date}.json"
+domains = ["kline", "financial", "announcement", "research", "risk_event"]
+
+[providers.text_docs]
+kind = "text_doc"
+root = "data/docs"
+extensions = [".txt", ".md", ".pdf", ".docx"]
+# 只做定性阅读，绝不从文档里抽取数值当作行情或财务数据。
+numeric_extraction = false
+domains = ["research", "policy_feed"]
+
+[providers.sql]
+kind = "sql"
+# sqlite | mysql | postgresql，连接串从环境变量读取，不写进仓库。
+driver = "sqlite"
+dsn_env = "STOCKSENATE_SQL_DSN"
+read_only = true
+domains = ["kline", "financial"]
+
+[routing]
+# 每个域的尝试顺序；第一个健康且新鲜的 Provider 胜出。
+kline = ["tickhub_cn", "local_json", "sql"]
+quote = ["tickhub_cn"]
+financial = ["tickhub_cn", "local_json", "sql"]
+announcement = ["tickhub_cn", "local_json"]
+research = ["tickhub_cn", "text_docs", "local_json"]
+risk_event = ["tickhub_cn", "local_json"]
+news = ["newsieve"]
+social_buzz = ["newsieve"]
+policy_feed = ["newsieve", "text_docs"]
+money_flow = ["tickhub_cn"]
+dragon_tiger = ["tickhub_cn"]
+lockup_calendar = ["tickhub_cn"]
+
+[freshness]
+# data_as_of 超过阈值即标记 freshness=archive，报告必须显式提示。
+realtime_max_seconds = 900
+cached_max_seconds = 86400
+# 回测/历史分析禁止使用晚于分析日的数据（防未来函数）。
+enforce_no_lookahead = true

@@ -1,0 +1,55 @@
+# StockSenate 报告模板
+# 章节顺序即输出顺序；空章节自动跳过，但不允许缺章节占位符。
+
+[meta]
+title = "{code} {name} 投研合议报告"
+language = "zh-CN"
+include_disclaimer = true
+include_data_envelope = true
+
+[sections.analysts]
+title = "一、分析师观点"
+source = "analyst_reports"
+per_role = true
+
+[sections.research]
+title = "二、多空辩论与研究经理结论"
+source = "research_verdict"
+
+[sections.trade]
+title = "三、交易方案"
+source = "trade_plan"
+# 明确禁止输出可执行价位以外的执行指令；字段级校验见 DEC-006。
+forbidden_fields = ["order_id", "broker_account", "auto_order"]
+
+[sections.risk]
+title = "四、风险辩论"
+source = "risk_arguments"
+
+[sections.decision]
+title = "五、投资经理终审"
+source = "final_decision"
+fields = ["rating", "horizon", "reasons", "risks", "confidence"]
+
+[sections.quality]
+title = "六、质量评估"
+source = "quality_verdict"
+show_dimensions = true
+
+[sections.data]
+title = "附：数据来源与新鲜度"
+source = "data_envelopes"
+fields = ["domain", "source", "data_as_of", "freshness", "confidence", "data_source_status"]
+
+[export]
+formats = ["md", "json"]
+# pdf/docx 依赖可选 extra，缺依赖时降级为 md 并在报告里注明。
+optional_formats = ["pdf", "docx"]
+snapshot = true
+diff_fields = true
+
+[disclaimer]
+text = """
+本报告由 AI 自动生成，仅用于研究与教学，不构成任何投资建议，也不包含可执行的交易指令。
+股市有风险，投资需谨慎。
+"""

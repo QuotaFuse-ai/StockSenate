@@ -1,0 +1,29 @@
+StockSenate
+Copyright 2026 QuotaFuse
+
+This product includes software developed by QuotaFuse.
+
+Third-party components and their licenses:
+
+- LangGraph / LangChain — MIT License, Copyright LangChain, Inc.
+- Typer — MIT License, Copyright Sebastián Ramírez
+- Rich — MIT License, Copyright Will McGugan
+- Pydantic / pydantic-settings — MIT License, Copyright Samuel Colvin
+- Streamlit — Apache License 2.0, Copyright Streamlit Inc.
+- pandas — BSD 3-Clause License, Copyright pandas Development Team
+- NumPy — BSD 3-Clause License, Copyright NumPy Developers
+- mootdx — MIT License (optional, via `[stockdata]` extra)
+- MCP Python SDK — MIT License, Copyright Anthropic, PBC
+- TickHub-CN / TickHub-US / Newsieve — QuotaFuse data services, used via
+  documented APIs only. No data source code is vendored into this repository.
+
+This project's research framework is inspired by the open-source
+TradingAgents project. StockSenate is an independent implementation and does
+not include TradingAgents source code; behavioural compatibility is limited to
+the public `propagate` contract described in README.md.
+
+TradingAgents-astock is referenced for behavioural comparison only.
+
+StockSenate performs research analysis and backtest simulation only. It does
+not place orders, connect to brokerages, or produce executable trading
+instructions.
