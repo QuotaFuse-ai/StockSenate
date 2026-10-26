@@ -6,6 +6,8 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 from stock_senate import cli
@@ -110,22 +112,41 @@ def test_mcp_stdio_stdout_is_still_only_jsonrpc_with_a_dotenv(tmp_path: Path) ->
     ]
     stdin = "".join(json.dumps(item) + "\n" for item in payloads)
 
-    result = subprocess.run(
+    process = subprocess.Popen(
         [sys.executable, "-c", "from stock_senate.cli import main; main()", "mcp", "stdio"],
         cwd=tmp_path,
         env=_cli_env(),
-        input=stdin,
-        capture_output=True,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
-        timeout=90,
     )
+    assert process.stdin is not None and process.stdout is not None
+    assert process.stderr is not None
+    process.stdin.write(stdin)
+    process.stdin.flush()
 
-    assert result.returncode == 0, result.stderr[-1500:]
-    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    # Closing stdin immediately makes the stdio server see EOF while tools/list
+    # is still being dispatched, and it can shut down before writing that
+    # response. Read both frames first, then close stdin to stop the server.
+    lines: list[str] = []
+    threading.Thread(
+        target=lambda: lines.extend(raw.strip() for raw in process.stdout if raw.strip()),
+        daemon=True,
+    ).start()
+    deadline = time.monotonic() + 60
+    while len(lines) < 2 and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+    process.stdin.close()
+    stderr = process.stderr.read()
+    process.wait(timeout=90)
+
+    assert process.returncode == 0, stderr[-1500:]
     assert len(lines) == 2
     for line in lines:
         message = json.loads(line)
         assert message["jsonrpc"] == "2.0"
-    assert SENTINEL not in result.stdout
-    assert SENTINEL not in result.stderr
+    assert SENTINEL not in "\n".join(lines)
+    assert SENTINEL not in stderr

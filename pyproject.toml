@@ -81,6 +81,9 @@ stock_senate = ["py.typed"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# `pytest` 的控制台脚本不会把仓库根加入 sys.path（只有 `python -m pytest` 会），
+# 部分用例以 `from tests.cli_support import ...` 引辅助模块，CI 下必须显式声明。
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100

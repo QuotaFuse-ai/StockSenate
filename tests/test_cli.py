@@ -126,9 +126,7 @@ def test_config_validate_strict_rejects_unknown_keys(tmp_path: Path) -> None:
 def test_config_show_does_not_echo_secrets_or_absolute_paths(tmp_path: Path) -> None:
     sentinel = "sk-audit-sentinel-0000"
     (tmp_path / "llm_config.toml").write_text(
-        "[llm]\n"
-        f'api_key = "{sentinel}"\n'
-        'dsn = "postgres://user:pass@localhost/db"\n',
+        f'[llm]\napi_key = "{sentinel}"\ndsn = "postgres://user:pass@localhost/db"\n',
         encoding="utf-8",
     )
     (tmp_path / "data_source.toml").write_text(
