@@ -37,7 +37,7 @@ class TextDocProvider(Provider):
     ) -> Any:
         from stock_senate.data.envelope import DataEnvelope
 
-        root = self._root() / domain / code
+        root, code = self._safe_subdir(domain, code)
         if not root.is_dir():
             raise ProviderNotAvailable(f"{domain}/{code}: no document directory")
 
@@ -65,7 +65,7 @@ class TextDocProvider(Provider):
             documents.append(
                 {
                     "title": path.stem,
-                    "file": str(path.relative_to(self._root())),
+                    "file": str(path.relative_to(self._root().resolve())),
                     "as_of": doc_date,
                     "text": result.text,
                     "injection_flags": result.removed_injections,

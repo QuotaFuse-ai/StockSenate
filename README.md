@@ -132,8 +132,7 @@ pip install -e ".[dev]"              # 开发
 
 ```bash
 cp .env.example .env          # 按文件内【必填】备注填写，模板不含任何真实密钥
-set -a; . ./.env; set +a      # 程序不自动读取 .env，需先导出到环境变量
-ssenate config validate
+ssenate config validate       # 启动时自动读取当前目录的 .env；已导出的变量优先
 ```
 
 ---

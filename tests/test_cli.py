@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -94,6 +95,61 @@ def test_config_validate_repository_config() -> None:
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
+
+
+def test_config_validate_strict_rejects_unknown_keys(tmp_path: Path) -> None:
+    directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config", directory)
+    path = directory / "workflow.toml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "max_debate_rounds = 2",
+            "max_debate_rounds = 2\nmax_debate_roundz = 3",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    lenient = run_cli("config", "validate", "--config", str(directory), "--output", "json")
+    assert lenient.returncode == 0, lenient.stderr
+    assert json.loads(lenient.stdout)["ok"] is True
+
+    strict = run_cli(
+        "config", "validate", "--config", str(directory), "--strict", "--output", "json"
+    )
+    assert strict.returncode == 3
+    payload = json.loads(strict.stdout)
+    assert payload["ok"] is False
+    assert any(error["key"] == "debate.max_debate_roundz" for error in payload["errors"])
+
+
+def test_config_show_does_not_echo_secrets_or_absolute_paths(tmp_path: Path) -> None:
+    sentinel = "sk-audit-sentinel-0000"
+    (tmp_path / "llm_config.toml").write_text(
+        "[llm]\n"
+        f'api_key = "{sentinel}"\n'
+        'dsn = "postgres://user:pass@localhost/db"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "data_source.toml").write_text(
+        "[providers.local_json]\n"
+        'kind = "json_file"\n'
+        f'root = "{(tmp_path / "archive").as_posix()}"\n',
+        encoding="utf-8",
+    )
+
+    result = run_cli("config", "show", "--config", str(tmp_path), "--output", "json")
+
+    assert result.returncode == 0, result.stderr
+    assert sentinel not in result.stdout
+    assert sentinel not in result.stderr
+    assert str(tmp_path) not in result.stdout
+    assert "postgres://user:pass@localhost/db" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["llm_config"]["llm"]["api_key"] == "***"
+    assert payload["llm_config"]["llm"]["dsn"] == "***"
+    assert payload["config_dir"] == "***"
+    assert payload["data_source"]["providers"]["local_json"]["root"] == "***"
 
 
 def test_missing_config_dir_is_a_config_error() -> None:

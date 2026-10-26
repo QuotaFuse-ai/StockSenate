@@ -20,6 +20,7 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
+from stock_senate.data.codes import normalize_code
 from stock_senate.data.envelope import (
     DataEnvelope,
     SourceStatus,
@@ -87,6 +88,26 @@ class DataAccessLayer:
         as_of = _as_day(as_of or self.as_of)
         attempts: list[dict[str, Any]] = []
         self.attempts[domain] = attempts
+        try:
+            code = normalize_code(code)
+        except ValueError:
+            # A code is a path segment in every archive provider. Refusing it
+            # here means the raw string never reaches a provider; the caller
+            # still gets the ordinary missing envelope instead of an exception.
+            attempts.append(
+                {
+                    "provider": "router",
+                    "error": "ValueError",
+                    "reason": "invalid code rejected before providers",
+                    "status": "missing",
+                }
+            )
+            return DataEnvelope.missing(
+                domain,
+                str(code),
+                as_of=as_of,
+                detail="非法标的代码，已拒绝进入数据源",
+            )
         candidates = self.candidates(domain)
         if not candidates:
             return DataEnvelope.missing(

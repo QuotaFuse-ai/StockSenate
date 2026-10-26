@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from stock_senate.config.loader import ensure_home, load_config
+from stock_senate.data.codes import normalize_code
 from stock_senate.data.envelope import date_only
 from stock_senate.data.router import DataAccessLayer, summarize
 from stock_senate.observability.logging import new_trace_id, redact
@@ -95,6 +96,14 @@ class SenateGraph:
         code = str(code or "").strip()
         if not code:
             raise ValueError("analyze 需要标的代码")
+        try:
+            code = normalize_code(code)
+        except ValueError as exc:
+            # Fail before any provider or model is touched; the generic message
+            # keeps a hostile code out of logs and reports.
+            raise ValueError(
+                "analyze 需要合法的 A 股代码（6 位数字，可带 sh/sz/bj 前缀）"
+            ) from exc
         as_of = date_only(date)
         if len(as_of) != 10 or as_of[4] != "-" or as_of[7] != "-":
             raise ValueError(f"分析日期必须是 YYYY-MM-DD，收到 {date!r}")

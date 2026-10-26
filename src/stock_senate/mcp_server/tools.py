@@ -60,7 +60,7 @@ def _error(exc: BaseException) -> dict[str, Any]:
     error: dict[str, Any] = {
         "kind": kind,
         "type": type(exc).__name__,
-        "reason": str(redact(str(exc))),
+        "reason": str(redact(str(exc), mask_paths=True)),
     }
     retry_after = getattr(exc, "retry_after", None)
     if retry_after is not None:
@@ -79,6 +79,11 @@ def _today() -> str:
 
 def _value(raw: Any) -> Any:
     return getattr(raw, "value", raw)
+
+
+def _out(payload: dict[str, Any]) -> dict[str, Any]:
+    """Mask credentials and absolute local paths at the MCP boundary."""
+    return redact(payload, mask_paths=True)
 
 
 def _envelope_row(raw: Any) -> dict[str, Any]:
@@ -129,7 +134,7 @@ def analyse(
         return _error(exc)
 
     files = dict(decision.get("report") or {})
-    return {
+    return _out({
         "ok": True,
         "run_id": decision.get("run_id"),
         "trace_id": decision.get("trace_id"),
@@ -142,7 +147,7 @@ def analyse(
         "data": decision.get("data"),
         "partial": bool(decision.get("partial")),
         "disclaimer": decision.get("disclaimer") or DISCLAIMER,
-    }
+    })
 
 
 def backtest(
@@ -179,7 +184,7 @@ def backtest(
         return _error(exc)
 
     artifacts = dict(result.get("artifacts") or {})
-    return {
+    return _out({
         "ok": True,
         "mode": "backtest",
         "simulation": True,
@@ -194,7 +199,7 @@ def backtest(
         "equity_curve_ref": artifacts.get("sqlite"),
         "artifacts": artifacts,
         "disclaimer": result.get("disclaimer") or DISCLAIMER,
-    }
+    })
 
 
 def alert_query(
@@ -228,13 +233,13 @@ def alert_query(
             continue
         matched.append(row)
 
-    return {
+    return _out({
         "ok": True,
         "alerts": matched,
         "count": len(matched),
         "log": str(webui_channel.alerts_log(root)),
         "disclaimer": DISCLAIMER,
-    }
+    })
 
 
 def report_query(
@@ -269,7 +274,7 @@ def report_query(
         return _error(exc)
 
     files = dict(state.get("report") or {})
-    return {
+    return _out({
         "ok": True,
         "run_id": state.get("run_id"),
         "summary": render_summary(state),
@@ -285,7 +290,7 @@ def report_query(
         },
         "report_path": files.get("report"),
         "disclaimer": DISCLAIMER,
-    }
+    })
 
 
 def config_query(
@@ -319,7 +324,7 @@ def config_query(
     return {
         "ok": True,
         "section": section or "all",
-        "config": redact(payload),
+        "config": redact(payload, mask_paths=True),
         "config_hash": loaded.get("config_hash"),
         "disclaimer": DISCLAIMER,
     }

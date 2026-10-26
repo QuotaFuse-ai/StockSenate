@@ -64,6 +64,179 @@ ALERT_LEVELS = {"high", "mid", "low"}
 ON_EXCEED = {"stop", "fail"}
 HITL_CHECKPOINTS = {"after_trader", "before_final"}
 
+_ANY = "*"
+
+_ROLE_ENTRY = {
+    "display_name",
+    "kind",
+    "alias",
+    "prompt",
+    "tools",
+    "output_schema",
+    "enabled",
+    "weight",
+}
+_LLM_ROLE_ENTRY = {"provider", "model"}
+_STRUCTURED = {"enabled", "max_local_retries", "mark_partial_on_failure"}
+_FALLBACK = {"chain": None}
+
+# Closed tables are enumerated; ``_ANY`` marks name-keyed tables whose child
+# names are user-defined. A ``None`` value stops the walk (scalars/lists).
+_KNOWN_KEYS: dict[str, dict[str, Any]] = {
+    "llm_config.toml": {
+        "llm": {
+            "llm_provider": None,
+            "deep_think_llm": None,
+            "quick_think_llm": None,
+            "backend_url": None,
+            "max_tokens": None,
+            "output_language": None,
+            "market_lookback_days": None,
+            "llm_timeout": None,
+            "llm_max_retries": None,
+            "llm_retry_delay": None,
+            "api_key": None,
+            "api_key_env": None,
+            "role_llms": {_ANY: _LLM_ROLE_ENTRY},
+            "allowed_keys": {"keys": None, "strict": None},
+            "structured_output": _STRUCTURED,
+            "fallback": _FALLBACK,
+        },
+        "structured_output": _STRUCTURED,
+        "fallback": _FALLBACK,
+    },
+    "agent_roles.toml": {
+        "roles": {_ANY: _ROLE_ENTRY},
+        "custom": {_ANY: _ROLE_ENTRY},
+        "limits": {"max_roles": None, "max_custom_roles": None},
+        "tool_permissions": {"enforce": None, "deny_write_tools": None},
+    },
+    "workflow.toml": {
+        "topology": {"pipeline": None, "analyst_inputs": None},
+        "debate": {
+            "max_debate_rounds": None,
+            "max_risk_discuss_rounds": None,
+            "convergence_enabled": None,
+            "convergence_min_new_points_ratio": None,
+            "convergence_max_rounds": None,
+        },
+        "hitl": {
+            "enabled": None,
+            "checkpoints": None,
+            "on_timeout": None,
+            "timeout_seconds": None,
+        },
+        "checkpoint": {"enabled": None, "backend": None, "path": None, "resume_by": None},
+        "incremental": {"enabled": None, "reuse_within_seconds": None, "invalidate_on": None},
+        "quality_gate": {
+            "enabled": None,
+            "threshold": None,
+            "block_on_fail": None,
+            "dimensions": None,
+        },
+        "compression": {
+            "enabled": None,
+            "trigger_tokens": None,
+            "chunk_tokens": None,
+            "keep_citations": None,
+        },
+        "budget": {"max_llm_calls": None, "max_total_tokens": None, "max_wall_clock_seconds": None},
+        "queue": {
+            "max_attempts": None,
+            "retry_delay_seconds": None,
+            "on_failure": None,
+            "stale_running_seconds": None,
+        },
+    },
+    "data_source.toml": {
+        "global": {
+            "mode": None,
+            "allow_fallback": None,
+            "forbid_llm_fill": None,
+            "default_timeout_seconds": None,
+            "max_retries": None,
+        },
+        # Providers are pluggable: their keys depend on ``kind``.
+        "providers": {_ANY: None},
+        "routing": {_ANY: None},
+        "freshness": {
+            "realtime_max_seconds": None,
+            "cached_max_seconds": None,
+            "enforce_no_lookahead": None,
+        },
+    },
+    "alert_rules.toml": {
+        "global": {
+            "enabled": None,
+            "dedup_hours": None,
+            "quiet_hours": None,
+            "max_triggers_per_day": None,
+        },
+        # Channel tables carry channel-specific keys (URLs, headers, ...).
+        "channels": {_ANY: None},
+        "rules": {
+            "id": None,
+            "name": None,
+            "level": None,
+            "when": None,
+            "cooldown_minutes": None,
+            "channels": None,
+            "enabled": None,
+        },
+    },
+    "budget.toml": {
+        "per_run": {
+            "max_llm_calls": None,
+            "max_input_tokens": None,
+            "max_output_tokens": None,
+            "max_wall_clock_seconds": None,
+            "on_exceed": None,
+            "max_cost_cny": None,
+        },
+        "per_queue": {
+            "max_llm_calls": None,
+            "max_total_tokens": None,
+            "max_wall_clock_seconds": None,
+            "max_cost_cny": None,
+        },
+        "daily": {"max_llm_calls": None, "max_total_tokens": None, "max_cost_cny": None},
+        "circuit_breaker": {
+            "enabled": None,
+            "failure_threshold": None,
+            "open_seconds": None,
+            "max_open_seconds": None,
+            "half_open_probes": None,
+        },
+        "pricing": {"table": {_ANY: None}},
+        "reporting": {"record_usage": None, "store": None, "path": None},
+    },
+    "output_template.toml": {
+        "meta": {
+            "title": None,
+            "language": None,
+            "include_disclaimer": None,
+            "include_data_envelope": None,
+        },
+        "sections": {
+            _ANY: {
+                "title": None,
+                "source": None,
+                "per_role": None,
+                "forbidden_fields": None,
+                "fields": None,
+                "show_dimensions": None,
+            }
+        },
+        "export": {
+            "formats": None,
+            "optional_formats": None,
+            "snapshot": None,
+            "diff_fields": None,
+        },
+        "disclaimer": {"text": None},
+    },
+}
+
 
 def _error(errors: list[dict[str, str]], file: str, key: str, message: str) -> None:
     errors.append({"file": file, "key": key, "message": message})
@@ -82,8 +255,61 @@ def _load(directory: Path, name: str, errors: list[dict[str, str]]) -> dict[str,
         return None
 
 
-def validate_dir(directory: Path) -> dict[str, Any]:
-    """Validate every config file in ``directory``."""
+def _check_unknown_keys(
+    name: str,
+    data: dict[str, Any],
+    errors: list[dict[str, str]],
+    warnings: list[dict[str, str]],
+    strict: bool,
+) -> None:
+    spec = _KNOWN_KEYS.get(name)
+    if spec is None:
+        return
+    _walk_unknown(name, "", data, spec, errors, warnings, strict)
+
+
+def _walk_unknown(
+    file: str,
+    prefix: str,
+    data: Any,
+    spec: Any,
+    errors: list[dict[str, str]],
+    warnings: list[dict[str, str]],
+    strict: bool,
+) -> None:
+    if isinstance(data, list):
+        for index, item in enumerate(data):
+            _walk_unknown(file, f"{prefix}[{index}]", item, spec, errors, warnings, strict)
+        return
+    if not isinstance(data, dict):
+        return
+    if isinstance(spec, (set, frozenset)):
+        spec = {key: None for key in spec}
+    for key, value in data.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if key in spec:
+            child = spec[key]
+        elif _ANY in spec:
+            child = spec[_ANY]
+        else:
+            entry = {
+                "file": file,
+                "key": path,
+                "message": "未知配置键，不会生效；拼写错误请改正，自定义键请确认已支持",
+            }
+            (errors if strict else warnings).append(entry)
+            continue
+        if child is not None:
+            _walk_unknown(file, path, value, child, errors, warnings, strict)
+
+
+def validate_dir(directory: Path, *, strict: bool = False) -> dict[str, Any]:
+    """Validate every config file in ``directory``.
+
+    Unknown keys always produce a diagnostic. They are warnings by default and
+    errors when ``strict`` is set, so a typo cannot pass unnoticed while a
+    future-compatible hand-written key still loads.
+    """
     directory = Path(directory).expanduser()
     errors: list[dict[str, str]] = []
     warnings: list[dict[str, str]] = []
@@ -98,6 +324,8 @@ def validate_dir(directory: Path) -> dict[str, Any]:
         if data is not None:
             loaded[name] = data
 
+    for name, data in loaded.items():
+        _check_unknown_keys(name, data, errors, warnings, strict)
     if "llm_config.toml" in loaded:
         _check_llm(loaded["llm_config.toml"], errors, warnings)
     if "agent_roles.toml" in loaded:

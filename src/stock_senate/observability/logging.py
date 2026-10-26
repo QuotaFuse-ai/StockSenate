@@ -37,6 +37,19 @@ _SECRET_VALUE_RE = re.compile(
     r"(sk-[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._~+/=-]{8,})",
     re.IGNORECASE,
 )
+# Path-like keys are only masked when their value is absolute: a relative
+# ``root = "data"`` is not sensitive, and keeping it readable helps support.
+_PATH_KEY_RE = re.compile(
+    r"(^|_)(path|paths|root|roots|dir|dirs|directory|cwd|home|file|files|folder)(_|$)",
+    re.IGNORECASE,
+)
+_ABS_PATH_RE = re.compile(
+    r"""(?:[A-Za-z]:[\\/][^\s"'<>|]*)                  # C:\... or C:/...
+    |(?:\\\\[^\s"'<>|\\/]+(?:[\\/][^\s"'<>|]+)+)       # \\host\share\...
+    |(?<![\w:/])/(?:[^\s"'<>|/]+/)*[^\s"'<>|/]+        # /home/...
+    """,
+    re.VERBOSE,
+)
 _MASK = "***"
 
 _trace_id: contextvars.ContextVar[str] = contextvars.ContextVar("stock_senate_trace_id", default="")
@@ -65,22 +78,38 @@ def reset_trace_id(token: contextvars.Token[str]) -> None:
     _trace_id.reset(token)
 
 
-def redact(value: Any) -> Any:
-    """Recursively mask credentials in mappings, sequences and strings."""
+def redact(value: Any, *, mask_paths: bool = False) -> Any:
+    """Recursively mask credentials in mappings, sequences and strings.
+
+    ``mask_paths`` additionally masks absolute local paths (``C:\\Users\\...``,
+    ``/home/...``). It is opt-in because log records benefit from the path,
+    while anything copied out of the process (``config show``, MCP results)
+    should not carry the operator's home directory.
+    """
     if isinstance(value, dict):
         cleaned: dict[Any, Any] = {}
         for key, item in value.items():
             if isinstance(key, str) and _SECRET_KEY_RE.search(key):
                 cleaned[key] = _MASK
+            elif (
+                mask_paths
+                and isinstance(key, str)
+                and _PATH_KEY_RE.search(key)
+                and isinstance(item, str)
+                and _ABS_PATH_RE.search(item)
+            ):
+                cleaned[key] = _MASK
             else:
-                cleaned[key] = redact(item)
+                cleaned[key] = redact(item, mask_paths=mask_paths)
         return cleaned
     if isinstance(value, (list, tuple, set)):
-        return [redact(item) for item in value]
+        return [redact(item, mask_paths=mask_paths) for item in value]
     if isinstance(value, str):
-        return _SECRET_VALUE_RE.sub(_MASK, value)
+        masked = _SECRET_VALUE_RE.sub(_MASK, value)
+        return _ABS_PATH_RE.sub(_MASK, masked) if mask_paths else masked
     if isinstance(value, BaseException):
-        return _SECRET_VALUE_RE.sub(_MASK, str(value))
+        masked = _SECRET_VALUE_RE.sub(_MASK, str(value))
+        return _ABS_PATH_RE.sub(_MASK, masked) if mask_paths else masked
     return value
 
 

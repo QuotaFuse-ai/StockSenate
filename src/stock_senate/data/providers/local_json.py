@@ -28,7 +28,7 @@ class LocalJsonProvider(Provider):
     def fetch(
         self, domain: str, code: str, as_of: str, params: dict[str, Any] | None = None
     ) -> Any:
-        directory = self._root() / domain / code
+        directory, code = self._safe_subdir(domain, code)
         if not directory.is_dir():
             raise ProviderNotAvailable(f"{domain}/{code}: no archive directory")
 
@@ -48,7 +48,7 @@ class LocalJsonProvider(Provider):
         try:
             raw = json.loads(chosen.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            raise ProviderError(f"{chosen.relative_to(self._root())}: {exc}") from exc
+            raise ProviderError(f"{chosen.relative_to(self._root().resolve())}: {exc}") from exc
 
         payload, meta = _split_payload(raw)
         data_as_of = str(meta.get("data_as_of") or chosen.stem)

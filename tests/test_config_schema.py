@@ -143,3 +143,80 @@ def test_output_template_must_forbid_order_fields(tmp_path: Path) -> None:
     report = schema.validate_dir(directory)
     assert report["ok"] is False
     assert any("auto_order" in error["message"] for error in report["errors"])
+
+
+def test_unknown_key_warns_by_default(tmp_path: Path) -> None:
+    directory = copy_config(tmp_path)
+    path = directory / "workflow.toml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "max_debate_rounds = 2",
+            "max_debate_rounds = 2\nmax_debate_roundz = 3",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    report = schema.validate_dir(directory)
+    assert report["ok"] is True, report["errors"]
+    assert any(warning["key"] == "debate.max_debate_roundz" for warning in report["warnings"])
+
+
+def test_strict_mode_turns_unknown_key_into_an_error(tmp_path: Path) -> None:
+    directory = copy_config(tmp_path)
+    path = directory / "workflow.toml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "max_debate_rounds = 2",
+            "max_debate_rounds = 2\nmax_debate_roundz = 3",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    report = schema.validate_dir(directory, strict=True)
+    assert report["ok"] is False
+    assert any(error["key"] == "debate.max_debate_roundz" for error in report["errors"])
+
+
+def test_unknown_top_level_table_is_reported(tmp_path: Path) -> None:
+    directory = copy_config(tmp_path)
+    append_to(directory / "workflow.toml", "\n[experimental]\nflag = true\n")
+    report = schema.validate_dir(directory)
+    assert report["ok"] is True
+    assert any(warning["key"] == "experimental" for warning in report["warnings"])
+
+
+def test_unknown_key_inside_a_role_entry_is_reported(tmp_path: Path) -> None:
+    directory = copy_config(tmp_path)
+    path = directory / "agent_roles.toml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            'output_schema = "AnalystReport"',
+            'output_schema = "AnalystReport"\noutput_schem = "AnalystReport"',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    report = schema.validate_dir(directory)
+    assert report["ok"] is True
+    assert any(warning["key"] == "roles.market.output_schem" for warning in report["warnings"])
+
+
+def test_name_keyed_tables_accept_new_names(tmp_path: Path) -> None:
+    directory = copy_config(tmp_path)
+    append_to(
+        directory / "agent_roles.toml",
+        '\n[roles.custom_sector]\n'
+        'display_name = "行业分析师"\n'
+        'kind = "analyst"\n'
+        'tools = ["news_search"]\n'
+        'output_schema = "AnalystReport"\n'
+        "enabled = false\n",
+    )
+    append_to(
+        directory / "data_source.toml",
+        '\n[providers.my_archive]\nkind = "json_file"\nroot = "data/mine"\n',
+    )
+    append_to(directory / "output_template.toml", '\n[sections.appendix]\ntitle = "附录"\n')
+    report = schema.validate_dir(directory)
+    assert report["ok"] is True, report["errors"]
+    assert report["warnings"] == []

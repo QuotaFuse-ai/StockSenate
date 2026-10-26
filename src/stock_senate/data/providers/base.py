@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from stock_senate.data.envelope import DataEnvelope
+from stock_senate.data.sanitize import sanitize_external_text
 
 
 class ProviderNotAvailable(RuntimeError):
@@ -81,6 +82,25 @@ class Provider(ABC):
             path = (self.home or Path.cwd()) / path
         return path
 
+    def _safe_subdir(self, domain: str, code: str) -> tuple[Path, str]:
+        """Resolve ``root/domain/code`` and refuse anything outside ``root``.
+
+        Returns the directory plus the canonical code. Every path-building
+        provider goes through this method, so a request that reaches a provider
+        directly still cannot read outside the archive.
+        """
+        from stock_senate.data.codes import normalize_code
+
+        try:
+            canonical = normalize_code(code)
+        except ValueError as exc:
+            raise ProviderNotAvailable(f"{domain}: 非法标的代码，已拒绝") from exc
+        root = self._root().resolve()
+        candidate = (root / domain / canonical).resolve()
+        if not candidate.is_relative_to(root):
+            raise ProviderNotAvailable(f"{domain}: code escapes archive root")
+        return candidate, canonical
+
 
 def envelope_from_payload(
     *,
@@ -136,11 +156,72 @@ def envelope_from_payload(
     )
 
 
+def _sanitize_payload(value: Any, counters: dict[str, Any]) -> Any:
+    if isinstance(value, str):
+        result = sanitize_external_text(value)
+        counters["injections"] += result.removed_injections
+        counters["sentences"] += result.removed_sentences
+        counters["flags"].update(result.flags)
+        return result.text
+    if isinstance(value, dict):
+        return {key: _sanitize_payload(item, counters) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_sanitize_payload(item, counters) for item in value]
+    return value
+
+
+def sanitize_envelope(envelope: DataEnvelope) -> DataEnvelope:
+    """Strip injected instructions from an envelope's external text.
+
+    The cleaning is recorded in ``source_detail`` so a reader can tell that the
+    upstream prose was rewritten; nothing is dropped silently.
+    """
+    counters: dict[str, Any] = {"injections": 0, "sentences": 0, "flags": set()}
+    payload = _sanitize_payload(envelope.payload, counters)
+    if not counters["injections"] and not counters["sentences"]:
+        return envelope
+    note = f"sanitized: injections={counters['injections']}, sentences={counters['sentences']}"
+    if counters["flags"]:
+        # Record how many prohibited terms were found, not the terms themselves:
+        # the note travels in the digest and the prompt, which must stay clean.
+        note += f", matched_terms={len(set(counters['flags']))}"
+    detail = f"{envelope.source_detail} | {note}" if envelope.source_detail else note
+    return envelope.model_copy(update={"payload": payload, "source_detail": detail})
+
+
+class SanitizingProvider(Provider):
+    """Single exit that cleans external text before it leaves the data layer.
+
+    Wrapping every provider at the factory means no provider — current or
+    future — can hand raw upstream prose to the digest or the prompt.
+    """
+
+    def __init__(self, child: Provider) -> None:
+        super().__init__(child.name, child.config, home=child.home)
+        self.child = child
+        self.kind = child.kind
+
+    @property
+    def domains(self) -> set[str]:
+        return self.child.domains
+
+    @property
+    def children(self) -> list[Provider]:
+        return list(getattr(self.child, "children", []))
+
+    def fetch(
+        self, domain: str, code: str, as_of: str, params: dict[str, Any] | None = None
+    ) -> DataEnvelope:
+        return sanitize_envelope(self.child.fetch(domain, code, as_of, params))
+
+
 __all__ = [
     "Provider",
     "ProviderError",
     "ProviderNotAvailable",
+    "SanitizingProvider",
     "TOOL_TO_DOMAIN",
     "envelope_from_payload",
+    "sanitize_envelope",
     "tool_to_domain",
 ]

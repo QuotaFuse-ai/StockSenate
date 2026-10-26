@@ -612,8 +612,10 @@ def config_show(
     config: Path = typer.Option(None, "--config", "-c"),
     output: str = typer.Option("table", "--output", "-o"),
 ) -> None:
-    """打印当前生效配置。"""
-    _emit(_load_config_dir(config), output)
+    """打印当前生效配置（密钥与绝对路径已打码）。"""
+    from stock_senate.observability.logging import redact
+
+    _emit(redact(_load_config_dir(config), mask_paths=True), output)
 
 
 @config_app.command("path")
@@ -637,12 +639,15 @@ def config_init(
 @config_app.command("validate")
 def config_validate(
     config: Path = typer.Option(None, "--config", "-c"),
+    strict: bool = typer.Option(
+        False, "--strict", help="把未知配置键视为错误，而不只是告警。"
+    ),
     output: str = typer.Option("table", "--output", "-o"),
 ) -> None:
     """校验七个配置文件；失败时定位到文件与键。"""
     validator = _require("stock_senate.config.schema", "M0")
     target = Path(config).expanduser() if config else _config_dir()
-    report = validator.validate_dir(target)
+    report = validator.validate_dir(target, strict=strict)
     _emit(report, output)
     if not report.get("ok", False):
         raise typer.Exit(EXIT_CONFIG)
@@ -674,14 +679,27 @@ def _ensure_utf8_stdio() -> None:
             pass
 
 
+def _load_dotenv() -> None:
+    """Read ``./.env`` without overriding anything already exported.
+
+    dotenv stays silent: ``mcp stdio`` writes JSON-RPC to stdout, so a banner
+    or a warning here would corrupt the transport.
+    """
+    from dotenv import load_dotenv
+
+    load_dotenv(dotenv_path=Path.cwd() / ".env", override=False, verbose=False)
+
+
 def main() -> None:
     _ensure_utf8_stdio()
+    _load_dotenv()
     app()
 
 
 def legacy_main() -> None:
     """Entry point for the deprecated ``tradingagents`` command."""
     _ensure_utf8_stdio()
+    _load_dotenv()
     typer.secho(
         "警告：`tradingagents` 已更名为 `ssenate`，本命令将在下个大版本移除。",
         fg=typer.colors.YELLOW,

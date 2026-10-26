@@ -11,6 +11,7 @@ from stock_senate.data.providers.base import (
     Provider,
     ProviderError,
     ProviderNotAvailable,
+    SanitizingProvider,
     envelope_from_payload,
     tool_to_domain,
 )
@@ -45,7 +46,9 @@ def build_provider(
         if candidate is None:
             raise ValueError(f"未知 provider 类型 {kind!r}（{name}）")
         cls = candidate
-    return cls(name, spec, home=home)
+    # Single exit for untrusted prose: every provider is wrapped so the digest
+    # and prompt can only ever see sanitized text.
+    return SanitizingProvider(cls(name, spec, home=home))
 
 
 def build_providers(
@@ -80,6 +83,7 @@ __all__ = [
     "ProviderError",
     "ProviderNotAvailable",
     "REMOTE_KINDS",
+    "SanitizingProvider",
     "SqlProvider",
     "TextDocProvider",
     "TickHubProvider",
