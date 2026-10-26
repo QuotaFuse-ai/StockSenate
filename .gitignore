@@ -54,5 +54,8 @@ desktop.ini
 # Build artefacts from docs
 *.pdf
 *.docx
-!councli.docx
-!councli文档.docx
+
+# Requirement originals and per-task working notes never enter the repo.
+# They live outside the checkout; DEC-013 records the removal.
+councli*
+docs/tasks/

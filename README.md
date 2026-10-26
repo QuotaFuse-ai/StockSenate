@@ -328,7 +328,8 @@ ssenate mcp http --port 8765
 | [docs/specs/priority.md](docs/specs/priority.md) | P0 / P1 / P2 优先级与排期 |
 | [docs/specs/cli-reference.md](docs/specs/cli-reference.md) | 全部 CLI / Python API / MCP 命令与退出码 |
 | [docs/decisions/](docs/decisions/) | 命名、数据层、端口等架构决策（只增不改） |
-| `councli.docx` / `councli文档.docx` | 需求原始文档（v1.1 / v1.2） |
+
+需求基线与逐任务的开发过程记录（验收证据、审计报告）不随仓库发布，存放于团队私有归档，见 DEC-013。
 
 ---
 

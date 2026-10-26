@@ -10,7 +10,7 @@
 | Python 包 | `stock_senate` |
 | CLI | `ssenate`（入口 `stock_senate.cli:main`） |
 | 数据底座 | TickHub-CN、TickHub-US（资讯域经 TickHub-CN） |
-| 来源文档 | `councli.docx` v1.1、`councli文档.docx` v1.2（含独立 WebUI） |
+| 来源文档 | 需求基线 v1.1（19 章）、v1.2（20 章，含独立 WebUI）；不随仓库发布，见 DEC-013 |
 | 需求来源 | QUOT-49 |
 | 作者 | 产品经理 |
 
@@ -227,3 +227,4 @@ ssenate analyze 600519 --date 2026-10-24
 |---|---|---|---|
 | 2026-10-26 | v1.1 | 数据底座移除 Newsieve（PyPI 404，不可获取）；`news` / `social_buzz` / `policy_feed` 三域改由 TickHub-CN 提供；`[backtest]` extra 移除（回测为纯 Python，无 pandas/numpy import）；默认 LLM 所需 `openai` / `anthropic` 声明为必装依赖；`[mcp]` 下限提到 `mcp>=2` | QUOT-56、DEC-009 |
 | 2026-10-26 | v1.1 | HITL 处理器接线与真实超时、`budget.per_run.on_exceed` 运行期消费（`fail`/`stop`）；日期参数校验拒绝非法日历日 | QUOT-49（P0） |
+| 2026-10-26 | v1.2 | 需求基线与逐任务过程记录移出仓库，来源文档改按版本引用，不再出现文件名 | QUOT-49、DEC-013 |
