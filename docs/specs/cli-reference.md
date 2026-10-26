@@ -210,6 +210,7 @@ final_state, decision = graph.propagate("600519", "2026-10-24")
 | `STOCKSENATE_ALERT_WEBHOOK` / `STOCKSENATE_ALERT_WEBHOOK_SECRET` | 告警回调地址与签名密钥 |
 | `STOCKSENATE_SQL_DSN` | SQL Provider 连接串（只读账号） |
 | `STOCKSENATE_TRACE_EXPORTER` | `none` / `otlp` / `langfuse` |
+| `STOCKSENATE_LOG_FILE` | 日志文件路径；设置即启用轮转 file sink（优先于 `[logging].file_enabled`） |
 
 兼容：旧前缀 `QF_COUNCIL_*`、`TRADINGAGENTS_*` 仍可读，**新前缀优先**，并在 stderr 提示迁移。
 
@@ -220,7 +221,7 @@ final_state, decision = graph.propagate("600519", "2026-10-24")
 | 文件 | 关键键 |
 |---|---|
 | `agent_roles.toml` | `[roles.*]`（kind/prompt/tools/output_schema/enabled）、`[limits]`（max_roles=12、max_custom_roles=5）、`[tool_permissions]` |
-| `workflow.toml` | `[topology]`、`[debate]`、`[hitl]`、`[checkpoint]`、`[incremental]`、`[quality_gate]`、`[compression]`、`[budget]` |
+| `workflow.toml` | `[topology]`、`[debate]`、`[hitl]`、`[checkpoint]`、`[incremental]`、`[quality_gate]`、`[compression]`、`[budget]`、`[logging]` |
 | `output_template.toml` | `[sections.*]`、`forbidden_fields`、`[export]`、`[disclaimer]` |
 | `data_source.toml` | `[global]`（mode/forbid_llm_fill）、`[providers.*]`、`[routing]`、`[freshness]` |
 | `llm_config.toml` | `[llm]` 七个基础键、`[llm.role_llms]`、`[llm.allowed_keys]`、`[llm.structured_output]` |
@@ -228,6 +229,14 @@ final_state, decision = graph.propagate("600519", "2026-10-24")
 | `budget.toml` | `[per_run]`、`[per_queue]`、`[daily]`、`[circuit_breaker]`、`[pricing]` |
 
 `llm.role_llms` 合法键共 16 个（见 §2.2）；写错键 → `config validate` 退出 `3`，**不会静默回退默认模型**。
+
+### 7.1 断点续跑（`[checkpoint]`）
+
+`enabled = true` 后，每个完成的阶段（分析师、多空辩论、研究经理、交易员、HITL 记录、风险辩论、终审、质量门）都会把产物写入 `path` 指向的 SQLite，键为 `code|date|config_hash`。中断的同一标的/日期/配置再次运行 `ssenate analyze` 时，已完成的节点直接复用、不重复调用模型；`resume_by` 默认 `["code","date","config_hash"]`，改配置会产生新键。运行成功后该键的所有行会被清除，**已完成的运行不会被旧断点命中**。默认 `enabled = false`，不落盘。
+
+### 7.2 日志文件（`[logging]`）
+
+默认只写 stderr（JSON 行，字段脱敏）。`file_enabled = true`（或设置 `STOCKSENATE_LOG_FILE`）时，同一份 JSON 额外镜像到 `file_path` 的轮转文件，按 `max_bytes` / `backup_count` 滚动；stdout 始终不写日志。相对 `file_path` 按状态根目录（`STOCKSENATE_HOME`）解析。
 
 ---
 

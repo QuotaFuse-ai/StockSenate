@@ -127,6 +127,12 @@ _KNOWN_KEYS: dict[str, dict[str, Any]] = {
             "timeout_seconds": None,
         },
         "checkpoint": {"enabled": None, "backend": None, "path": None, "resume_by": None},
+        "logging": {
+            "file_enabled": None,
+            "file_path": None,
+            "max_bytes": None,
+            "backup_count": None,
+        },
         "incremental": {"enabled": None, "reuse_within_seconds": None, "invalidate_on": None},
         "quality_gate": {
             "enabled": None,
@@ -542,6 +548,39 @@ def _check_workflow(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
             _error(errors, "workflow.toml", "hitl.checkpoints", f"未知检查点 `{checkpoint}`")
     if hitl.get("on_timeout") not in {"auto_approve", "abort", None}:
         _error(errors, "workflow.toml", "hitl.on_timeout", "可选 auto_approve / abort")
+
+    checkpoint = data.get("checkpoint", {})
+    if checkpoint.get("enabled") is True:
+        backend = str(checkpoint.get("backend") or "sqlite").lower()
+        if backend != "sqlite":
+            _error(
+                errors,
+                "workflow.toml",
+                "checkpoint.backend",
+                "当前仅支持 sqlite；其他后端的检查点尚未实现",
+            )
+        if not str(checkpoint.get("path") or "").strip():
+            _error(errors, "workflow.toml", "checkpoint.path", "开启断点续跑时必须配置路径")
+        unknown = set(checkpoint.get("resume_by") or []) - {"code", "date", "config_hash"}
+        if unknown:
+            _error(
+                errors,
+                "workflow.toml",
+                "checkpoint.resume_by",
+                f"不支持的分区字段：{sorted(unknown)}",
+            )
+
+    logging_cfg = data.get("logging", {})
+    if logging_cfg.get("file_enabled") is True and not str(
+        logging_cfg.get("file_path") or ""
+    ).strip():
+        _error(errors, "workflow.toml", "logging.file_path", "开启文件日志时必须配置路径")
+    for key in ("max_bytes", "backup_count"):
+        value = logging_cfg.get(key)
+        if value is not None and (not isinstance(value, int) or value < 0):
+            _error(errors, "workflow.toml", f"logging.{key}", "必须是非负整数")
+    if logging_cfg.get("max_bytes") == 0:
+        _error(errors, "workflow.toml", "logging.max_bytes", "必须大于 0")
 
     gate = data.get("quality_gate", {})
     threshold = gate.get("threshold", 70)

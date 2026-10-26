@@ -37,7 +37,7 @@ StockSenate 自身只负责「多智能体合议 + 回测推演」。
 | 分析师 | 7 个（市场/舆情/新闻/基本面 + 政策/游资/解禁），角色提示词内置，输出 Schema 强约束 |
 | 辩论与决策 | 多空辩论 → 研究经理 → 交易员 → 三档风控 → 投决，含收敛打分、可配置拓扑、interrupt 人工审批 |
 | 模型配置 | 快/深两档 + `role_llms` 细粒度，角色键位稳定 |
-| 断点恢复 | SQLite/Postgres checkpoint 与增量分析 |
+| 断点恢复 | SQLite checkpoint 中断续跑（默认关闭）与增量分析 |
 | 报告 | `summary.json` + `complete_report.md` + Markdown/PDF，含结构化版本快照、字段级 Diff、多格式输出 |
 | 决策统计 | `performance` 事后归因保持独立口径；回测引擎是单独能力，两者分开验收 |
 | 交互 | CLI + 独立 WebUI（独立进程/端口/鉴权）+ MCP Server（stdio/http） |
