@@ -16,6 +16,8 @@
 
 > 更新记录：2026-10-26 QUOT-57：新增真实数据形态回归（`tests/fixtures/tickhub/` + `tests/test_tickhub_fixture_regression.py`）、弱模型/预算/HITL 专项（`tests/test_resilience.py`）与报告 diff 专项（`tests/test_report_diff.py`）；5 处仍无自动化测试的缺口集中登记于 §二十一。
 
+> 更新记录：2026-10-26 QUOT-49 P0 修复：HITL 处理器经 `propagate(hitl_handler=...)` 接入，`timeout_seconds` 以守护线程 + 真实截止时间强制执行，CLI 仅在 stdin 为 TTY 时交互询问，其余入口按 `auto_approve` 留痕；`budget.per_run.on_exceed` 在 `run_role` 运行期消费（`fail` 立即失败、`stop` 降级并标 `partial`）。
+
 ---
 
 ## 一、项目基础信息（v1.1/v1.2 §1）
@@ -91,7 +93,7 @@
 | 6 | 17 项企业级能力按 M0–M4 映射 | `docs/specs/PRD.md` §4/§8、`priority.md` | — | 每项在里程碑表中有归属 | P0 | 已实现 |
 | 6 | 辩论智能收敛打分 + 阈值 | `workflow/debate.py` | analyze | 达到阈值提前结束并记录原因 | P1 | 已实现（`workflow/debate.py`） |
 | 6 | 事实交叉核验钩子（数值必须来自结构化数据，冲突标 `conflict`） | `workflow/verify.py` | analyze | 注入冲突数据时报告标 `conflict` | P1 | 已实现（`workflow/verify.py` 标 `conflict`） |
-| 6 | 人工介入工单（存储/通知/恢复/超时/权限/审计） | `workflow/hitl.py` | analyze / WebUI | 四种动作（同意/驳回/修改/超时）各一测 | P1 | 已实现（`workflow/hitl.py`；超时 auto_approve 留痕） |
+| 6 | 人工介入工单（存储/通知/恢复/超时/权限/审计） | `workflow/hitl.py` | analyze / WebUI | 四种动作（同意/驳回/修改/超时）各一测 | P1 | 已实现（`workflow/hitl.py`；处理器经 `propagate(hitl_handler=...)` 注入，`timeout_seconds` 真实截止并落到 `on_timeout`，超时留痕；WebUI 审批路由未实现，保留为待实现） |
 
 ## 七、数据源可插拔与底座对接（§7）
 
@@ -131,7 +133,7 @@
 | 9 | WebUI 可编辑角色/工作流/模板，写操作审计 | `webui/pages/settings.py` | WebUI | 每次写入产生审计记录 | P2 | 部分实现（仅角色启停 `POST /settings/roles` 可写并留痕；工作流/模板为只读。可编辑与全量写审计保留为待实现） |
 | 9.1 | 短期记忆用图状态；长期反思入 PGVector；同标的检索注入 | `workflow/memory.py`、`observability/reflection.py` | analyze | 可关闭；不跨标的污染 | P1 | 待实现（无 memory 模块） |
 | 9.2 | 防 Prompt 注入清洗层 + 合规过滤 | `data/sanitize.py`、`workflow/guardrails.py` | 全部输入 | 注入样本不改变系统行为 | P0 | 已实现（`data/sanitize.py`；`tests/test_external_sanitization.py` 4 类注入样本 × 参数化断言：清洗发生在摘要与提示词之前、清洗留痕、良性文本不动、所有 provider 统一包裹） |
-| 9.3 | HITL 两个强制挂起点，支持同意/驳回/修改/超时 | `workflow/hitl.py` | analyze / WebUI | 四种动作各一测；自动放行留痕 | P0 | 已实现（`workflow/hitl.py`；同意/驳回/修改、超时 `auto_approve`/`abort`、未启用跳过与自动放行留痕见 `tests/test_resilience.py`） |
+| 9.3 | HITL 两个强制挂起点，支持同意/驳回/修改/超时 | `workflow/hitl.py` | analyze / WebUI | 四种动作各一测；自动放行留痕 | P0 | 已实现（`workflow/hitl.py`；同意/驳回/修改、超时 `auto_approve`/`abort`、未启用跳过与自动放行留痕见 `tests/test_resilience.py`；P0 已接线：处理器经 `propagate(hitl_handler=...)` 注入，`timeout_seconds` 用守护线程 + `Event.wait` 真计时，CLI 仅在 `stdin.isatty()` 时交互，MCP/队列/WebUI/管道等非交互入口按 `auto_approve` 留痕） |
 | 9.4 | LLM-as-a-Judge 三维评分，<70 标 `low_quality` | `workflow/judge.py` | analyze / 报告 | 低分报告被标记且 WebUI 高亮 | P1 | 部分实现（`workflow/nodes/quality.py` 规则式三维质量门，<70 标 `low_quality`，数据覆盖按事实数计分、0 事实域不计覆盖；`tests/test_digest_quality.py`、`tests/test_tickhub_fixture_regression.py` 覆盖“ok 但 0 事实不计覆盖”与报告头/页脚一致性；LLM-as-a-Judge 未实现，保留为待实现） |
 | 9.5 | Map-Reduce 上下文压缩 | `workflow/compress.py` | analyze | 超阈值触发；引用不丢 | P1 | 待实现（无 compress 模块） |
 | 9.6 | OpenTelemetry / Langfuse 追踪 + trace_id | `observability/tracing.py` | 全部入口 | 一次运行的日志/span/用量同 id | P1 | 待实现（trace_id 已贯穿，未接 OTel/Langfuse） |
@@ -191,7 +193,7 @@
 
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
-| 15 | 三道上限（调用/token/超时）+ 优雅退出 | `config/budget.toml`、`workflow/budget.py` | 配置 | 命中后交付部分结果并标 `partial` | P0 | 已实现（`workflow/budget.py`，部分结果标 partial；调用/token/墙钟三道上限、配置读取与图级 `budget_tripped` 见 `tests/test_resilience.py`） |
+| 15 | 三道上限（调用/token/超时）+ 优雅退出 | `config/budget.toml`、`workflow/budget.py` | 配置 | 命中后交付部分结果并标 `partial` | P0 | 已实现（`workflow/budget.py`，部分结果标 partial；调用/token/墙钟三道上限、配置读取与图级 `budget_tripped` 见 `tests/test_resilience.py`；`on_exceed` 已运行期消费：`fail` 抛 `BudgetExceeded`（退出 8，队列不重试），`stop` 降级为 fallback 并标 `partial`） |
 | 15 | 队列：并发、限速、失败重试/跳过、进度查询 | `queue/manager.py` | `queue status/submit` | 50 任务并发 3 跑通 | P1 | 已实现（`test_queue`） |
 | 15 | 与底座限流/缓存/防重复锁协同 | `queue/locks.py` | 配置 | 同标的不并发重复分析 | P1 | 已实现（`queue/locks.py`） |
 | 15 | 暂停/恢复/取消 | `queue/manager.py` | CLI / WebUI | 三操作各一测 | P1 | 已实现（`test_queue`） |

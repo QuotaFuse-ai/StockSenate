@@ -16,16 +16,19 @@ over a local archive.
 
 from __future__ import annotations
 
+import io
 import json
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
-from cli_support import CODE, DAY, write_archive, write_config_dir
+from cli_support import CODE, DAY, cli_env, parse_json, run_cli, write_archive, write_config_dir
 
 from stock_senate.roles.llm import LLMUnavailable, RoleLLMResolver
 from stock_senate.workflow.budget import Budget, BudgetExceeded, budget_from_config
-from stock_senate.workflow.hitl import HitlReviewer, hitl_blocked
+from stock_senate.workflow.hitl import HitlReviewer, hitl_blocked, interactive_handler
 
 
 class FakeClient:
@@ -289,3 +292,232 @@ def test_a_tripped_budget_marks_the_decisions_partial(
     assert state["partial"] is True
     assert decision["budget_tripped"] == "超过单次分析 token 上限 100"
     assert decision["execution"] is False
+
+
+# --------------------------------------------------------------------------- #
+# QUOT-49 P0-1: the reviewer is wired into the graph, the deadline is real
+# --------------------------------------------------------------------------- #
+
+
+def test_a_stalled_handler_is_cut_off_at_the_configured_deadline() -> None:
+    def stall(checkpoint, payload):
+        time.sleep(10)
+        return {"decision": "approved"}
+
+    started = time.monotonic()
+    record = reviewer(stall, timeout_seconds=0.05).review("after_trader", {})
+
+    assert time.monotonic() - started < 2.0, "a stalled reviewer must not hold the run"
+    assert record["decision"] == "auto_approve"
+    assert record["auto_approved"] is True
+    assert "0.05s" in record["note"]
+
+
+def test_a_stalled_handler_aborts_when_on_timeout_says_so() -> None:
+    def stall(checkpoint, payload):
+        time.sleep(10)
+
+    record = reviewer(stall, timeout_seconds=0.05, on_timeout="abort").review("before_final", {})
+
+    assert record["decision"] == "abort"
+    assert record["auto_approved"] is False
+    assert "0.05s" in record["note"]
+    assert hitl_blocked([record]) is True
+
+
+def test_ctrl_c_during_the_wait_counts_as_no_answer() -> None:
+    class Interrupted(threading.Event):
+        def wait(self, timeout=None):
+            raise KeyboardInterrupt
+
+    with pytest.raises(TimeoutError):
+        reviewer(lambda checkpoint, payload: {"decision": "approved"})._await(Interrupted())
+
+
+def test_a_non_positive_deadline_leaves_the_handler_unsupervised() -> None:
+    def approve(checkpoint, payload):
+        return {"decision": "approved"}
+
+    record = reviewer(approve, timeout_seconds=0).review("after_trader", {})
+
+    assert record["decision"] == "approved"
+    assert record["auto_approved"] is False
+
+
+def test_propagate_asks_the_supplied_handler_at_each_checkpoint(
+    local_graph_config: Path,
+) -> None:
+    from stock_senate.graph.senate_graph import SenateGraph
+
+    asked: list[tuple[str, str]] = []
+
+    def handler(checkpoint: str, payload: Any) -> dict[str, Any]:
+        asked.append((checkpoint, str(payload.get("code"))))
+        return {"decision": "approved", "note": "人工同意"}
+
+    state, decision = SenateGraph(config=str(local_graph_config)).propagate(
+        CODE, DAY, hitl=True, hitl_handler=handler
+    )
+
+    assert [item[0] for item in asked] == ["after_trader", "before_final"]
+    assert {item[1] for item in asked} == {CODE}
+    traces = state["hitl"]["traces"]
+    assert [trace["decision"] for trace in traces] == ["approved", "approved"]
+    assert [trace["auto_approved"] for trace in traces] == [False, False]
+    assert [trace["note"] for trace in traces] == ["人工同意", "人工同意"]
+    assert decision["hitl"]["traces"] == traces
+
+
+def test_a_rejection_reaches_the_decision_as_partial(local_graph_config: Path) -> None:
+    from stock_senate.graph.senate_graph import SenateGraph
+
+    def handler(checkpoint: str, payload: Any) -> dict[str, Any]:
+        if checkpoint == "before_final":
+            return {"decision": "rejected", "note": "风险过高"}
+        return {"decision": "approved"}
+
+    state, decision = SenateGraph(config=str(local_graph_config)).propagate(
+        CODE, DAY, hitl=True, hitl_handler=handler
+    )
+
+    assert [trace["decision"] for trace in decision["hitl"]["traces"]] == [
+        "approved",
+        "rejected",
+    ]
+    assert decision["partial"] is True
+    assert state["partial"] is True
+
+
+def _scripted_input(monkeypatch: pytest.MonkeyPatch, lines: list[str]) -> None:
+    pending = list(lines)
+
+    def fake_input(*_args: Any, **_kwargs: Any) -> str:
+        if not pending:
+            raise EOFError
+        return pending.pop(0)
+
+    monkeypatch.setattr("builtins.input", fake_input)
+
+
+@pytest.mark.parametrize(
+    ("answers", "expected"),
+    [
+        ([""], {"decision": "approved"}),
+        (["a"], {"decision": "approved"}),
+        (["r"], {"decision": "rejected", "note": "人工驳回"}),
+        (["q"], {"decision": "abort", "note": "人工中止"}),
+        (
+            ["m", "rating=hold direction=hold"],
+            {
+                "decision": "approved",
+                "note": "人工修改",
+                "rating": "hold",
+                "direction": "hold",
+            },
+        ),
+        (["what", "a"], {"decision": "approved"}),
+    ],
+)
+def test_interactive_handler_turns_keystrokes_into_a_verdict(
+    monkeypatch: pytest.MonkeyPatch, answers: list[str], expected: dict[str, Any]
+) -> None:
+    _scripted_input(monkeypatch, answers)
+    handler = interactive_handler(out=io.StringIO())
+
+    answer = handler(
+        "after_trader",
+        {
+            "code": CODE,
+            "date": DAY,
+            "research": {"stance": "bull"},
+            "trade": {"direction": "buy"},
+        },
+    )
+
+    assert dict(answer) == expected
+
+
+def test_interactive_handler_treats_eof_as_no_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    _scripted_input(monkeypatch, [])
+    handler = interactive_handler(out=io.StringIO())
+
+    with pytest.raises(TimeoutError):
+        handler("after_trader", {})
+
+
+def test_interactive_handler_gives_up_after_three_invalid_choices(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _scripted_input(monkeypatch, ["x", "z", "w"])
+    handler = interactive_handler(out=io.StringIO())
+
+    with pytest.raises(TimeoutError):
+        handler("after_trader", {})
+
+
+def test_cli_without_a_tty_keeps_the_checkpoints_non_blocking(tmp_path: Path) -> None:
+    archive = write_archive(tmp_path / "archive")
+    config = write_config_dir(tmp_path / "config", archive)
+
+    result = run_cli(
+        "analyze",
+        CODE,
+        "--date",
+        DAY,
+        "--output",
+        "json",
+        env=cli_env(home=tmp_path / "home", config_dir=config),
+        timeout=120,
+    )
+
+    assert result.returncode == 0, result.stderr
+    traces = parse_json(result)["decision"]["hitl"]["traces"]
+    assert [trace["decision"] for trace in traces] == ["auto_approve", "auto_approve"]
+    assert all("未配置人工处理器" in trace["note"] for trace in traces)
+    assert "[人工复核]" not in result.stderr
+
+
+# --------------------------------------------------------------------------- #
+# QUOT-49 P0-2: budget.per_run.on_exceed is consumed at runtime
+# --------------------------------------------------------------------------- #
+
+
+def test_on_exceed_is_read_from_budget_toml_and_snapshotted() -> None:
+    budget = budget_from_config({"budget": {"per_run": {"on_exceed": " Fail "}}})
+
+    assert budget.on_exceed == "fail"
+    assert budget.snapshot()["on_exceed"] == "fail"
+    assert budget_from_config({}).on_exceed == "stop"
+
+
+def _write_on_exceed(config_dir: Path, value: str) -> None:
+    (config_dir / "budget.toml").write_text(f'[per_run]\non_exceed = "{value}"\n', encoding="utf-8")
+
+
+def test_on_exceed_fail_raises_instead_of_degrading(
+    local_graph_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from stock_senate.graph.senate_graph import SenateGraph
+
+    _write_on_exceed(local_graph_config, "fail")
+    _resolver_failing_on(monkeypatch, "trader", BudgetExceeded("超过单次分析 token 上限 100"))
+
+    graph = SenateGraph(config=str(local_graph_config))
+
+    with pytest.raises(BudgetExceeded, match="on_exceed=fail"):
+        graph.propagate(CODE, DAY, hitl=False)
+
+
+def test_on_exceed_stop_keeps_the_degraded_decision(
+    local_graph_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from stock_senate.graph.senate_graph import SenateGraph
+
+    _write_on_exceed(local_graph_config, "stop")
+    _resolver_failing_on(monkeypatch, "trader", BudgetExceeded("超过单次分析 token 上限 100"))
+
+    state, decision = SenateGraph(config=str(local_graph_config)).propagate(CODE, DAY, hitl=False)
+
+    assert decision["partial"] is True
+    assert decision["budget_tripped"].startswith("超过单次分析")
+    assert state["budget"]["on_exceed"] == "stop"

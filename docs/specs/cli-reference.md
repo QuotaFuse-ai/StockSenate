@@ -51,7 +51,9 @@ ssenate analyze 600519 --date 2026-10-24 --output json
 | `--weight` | 空 | `角色键=权重`，可重复，如 `custom_macro=0.6` |
 | `--no-hitl` | 关闭 | 跳过人工检查点；报告中记录 `auto_approved` |
 
-退出码：成功 `0`；决策被标 `partial` 时 `8`；全源失败 `4`；配置非法 `3`。
+退出码：成功 `0`；决策被标 `partial` 时 `8`；全源失败 `4`；配置非法 `3`；日期不是合法日历日（如 `2026-13-99`）`2`。
+
+人工复核（HITL）：默认在 `after_trader` 与 `before_final` 两个检查点暂停。**仅当 stdin 是 TTY** 时弹出交互提示（`a` 同意 / `r` 驳回 / `m` 修改 / `q` 中止，回车=同意），并按 `[hitl].timeout_seconds` 真实计时，超时落到 `on_timeout`（`auto_approve` 或 `abort`）。管道、cron、MCP、队列与 WebUI 等非交互入口不会阻塞，直接记录 `auto_approve` 与原因；`[hitl].enabled = false` 或 `--no-hitl` 时检查点标记为 `skipped`。
 
 ### 2.2 `ssenate role`
 
@@ -163,7 +165,7 @@ final_state, decision = graph.propagate("600519", "2026-10-24")
 契约：
 
 - `propagate(code, date)` 位置参数与返回 `(final_state, decision)` 不变。
-- `hitl=` 与 `overrides=` 是仅关键字扩展参数，不影响既有调用方式。
+- `hitl=`、`hitl_handler=` 与 `overrides=` 是仅关键字扩展参数，不影响既有调用方式。
 - `decision` 至少包含 `rating`（Buy/Hold/Sell）、`reason`、A 股约束标记；不含任何可执行价位。
 - 报告文件是衍生输出，**不是**返回值。
 
@@ -237,6 +239,10 @@ final_state, decision = graph.propagate("600519", "2026-10-24")
 ### 7.2 日志文件（`[logging]`）
 
 默认只写 stderr（JSON 行，字段脱敏）。`file_enabled = true`（或设置 `STOCKSENATE_LOG_FILE`）时，同一份 JSON 额外镜像到 `file_path` 的轮转文件，按 `max_bytes` / `backup_count` 滚动；stdout 始终不写日志。相对 `file_path` 按状态根目录（`STOCKSENATE_HOME`）解析。
+
+### 7.3 预算命中行为（`[budget].per_run.on_exceed`）
+
+`on_exceed = "stop"`（默认）命中上限时终止当前角色调用，以 fallback 继续并让决策标 `partial`；`on_exceed = "fail"` 直接抛出预算错误（CLI 退出 `8`，stderr 标明 `on_exceed=fail`），队列任务不重试。生效值写入运行快照 `budget.on_exceed`。
 
 ---
 

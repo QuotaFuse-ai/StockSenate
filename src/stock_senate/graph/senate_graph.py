@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Mapping
+from datetime import date as _date
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +39,7 @@ from stock_senate.workflow.budget import Budget, budget_from_config
 from stock_senate.workflow.checkpoint import CheckpointState, store_from_config
 from stock_senate.workflow.context import RunContext
 from stock_senate.workflow.digest import build_digest
-from stock_senate.workflow.hitl import HitlReviewer, hitl_blocked
+from stock_senate.workflow.hitl import HitlReviewer, Reviewer, hitl_blocked
 from stock_senate.workflow.nodes import (
     NodeConfigError,
     run_analysts,
@@ -95,14 +96,18 @@ class SenateGraph:
         date: str,
         *,
         hitl: bool = True,
+        hitl_handler: Reviewer | None = None,
         overrides: Mapping[str, Any] | None = None,
         progress: ProgressCallback | None = None,
         resume: bool = True,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Run the full graph for ``code`` as of ``date``.
 
-        ``hitl=False`` records every checkpoint as skipped; timeouts fall back
-        to ``auto_approve`` and are recorded as ``auto_approved``. ``overrides``
+        ``hitl=False`` records every checkpoint as skipped. ``hitl_handler`` is
+        the reviewer asked at each checkpoint; without one the checkpoint
+        auto-approves and the trace says so, which keeps queue, MCP and WebUI
+        runs non-blocking. Timeouts follow ``workflow.hitl.on_timeout`` and are
+        recorded as ``auto_approved`` unless configured to abort. ``overrides``
         carries ``enable`` / ``disable`` / ``weights`` from the CLI.
         ``progress`` is an optional ``(stage, status, fields)`` callback used by
         the WebUI progress page; a failing callback never interrupts a run.
@@ -122,6 +127,11 @@ class SenateGraph:
         as_of = date_only(date)
         if len(as_of) != 10 or as_of[4] != "-" or as_of[7] != "-":
             raise ValueError(f"分析日期必须是 YYYY-MM-DD，收到 {date!r}")
+        try:
+            _date.fromisoformat(as_of)
+        except ValueError as exc:
+            # Shape alone is not enough: 2026-13-99 looks right but is not a day.
+            raise ValueError(f"分析日期必须是 YYYY-MM-DD，收到 {date!r}") from exc
 
         trace_id = new_trace_id()
         run_id = f"{as_of}-{code}-{trace_id[:8]}"
@@ -155,7 +165,7 @@ class SenateGraph:
             home=home,
         )
 
-        reviewer = HitlReviewer(self.config, enabled=hitl)
+        reviewer = HitlReviewer(self.config, enabled=hitl, handler=hitl_handler)
         traces: list[dict[str, Any]] = []
         hitl_payload: dict[str, Any] = reviewer.summary(traces)
 
@@ -224,8 +234,10 @@ class SenateGraph:
                 analysts = run_analysts(ctx)
                 saved(
                     stage,
-                    {"reports": [report.model_dump() for report in analysts],
-                     "skipped": list(ctx.skipped)},
+                    {
+                        "reports": [report.model_dump() for report in analysts],
+                        "skipped": list(ctx.skipped),
+                    },
                 )
                 _progress(progress, stage, "done", seats=len(analysts))
 
@@ -328,9 +340,7 @@ class SenateGraph:
                 _progress(progress, stage, "done", score=quality.score, restored=True)
             else:
                 _progress(progress, stage, "running")
-                quality = run_quality_gate(
-                    ctx, analysts, research, trade, risk.arguments, decision
-                )
+                quality = run_quality_gate(ctx, analysts, research, trade, risk.arguments, decision)
                 saved(stage, quality.model_dump())
                 _progress(progress, stage, "done", score=quality.score)
             if quality.low_quality and not decision.low_quality:

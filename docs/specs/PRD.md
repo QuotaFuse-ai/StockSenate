@@ -115,7 +115,7 @@ StockSenate 的目标不是「再加几个 Agent」，而是把上述六项变�
 |---|---|---|
 | F-14 | 每节点 Pydantic Schema + 本地重试 + `partial` 标记 | 弱模型空输出被捕获并标 `partial`，不静默消失 |
 | F-15 | 安全护栏：注入剥离 + 合规过滤 | 外部文本中的指令不改变系统行为 |
-| F-16 | HITL：`after_trader` / `before_final` 两个检查点 | 超时策略可配；自动放行必须留痕 |
+| F-16 | HITL：`after_trader` / `before_final` 两个检查点 | 超时策略可配；自动放行必须留痕；交互复核仅在 TTY 下询问，非交互入口自动放行并留痕 |
 | F-17 | LLM-as-a-Judge 质量闸门 | 三维评分；<70 标 `low_quality` 且不阻断交付 |
 | F-18 | Map-Reduce 上下文压缩 | 超阈值触发；引用不丢 |
 | F-19 | Agent Memory：短期图状态 + 长期反思库 | 长期库可关闭；不得跨标的污染 |
@@ -226,3 +226,4 @@ ssenate analyze 600519 --date 2026-10-24
 | 日期 | 版本 | 变更 | 依据 |
 |---|---|---|---|
 | 2026-10-26 | v1.1 | 数据底座移除 Newsieve（PyPI 404，不可获取）；`news` / `social_buzz` / `policy_feed` 三域改由 TickHub-CN 提供；`[backtest]` extra 移除（回测为纯 Python，无 pandas/numpy import）；默认 LLM 所需 `openai` / `anthropic` 声明为必装依赖；`[mcp]` 下限提到 `mcp>=2` | QUOT-56、DEC-009 |
+| 2026-10-26 | v1.1 | HITL 处理器接线与真实超时、`budget.per_run.on_exceed` 运行期消费（`fail`/`stop`）；日期参数校验拒绝非法日历日 | QUOT-49（P0） |

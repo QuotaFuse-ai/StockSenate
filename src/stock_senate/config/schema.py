@@ -571,9 +571,10 @@ def _check_workflow(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
             )
 
     logging_cfg = data.get("logging", {})
-    if logging_cfg.get("file_enabled") is True and not str(
-        logging_cfg.get("file_path") or ""
-    ).strip():
+    if (
+        logging_cfg.get("file_enabled") is True
+        and not str(logging_cfg.get("file_path") or "").strip()
+    ):
         _error(errors, "workflow.toml", "logging.file_path", "开启文件日志时必须配置路径")
     for key in ("max_bytes", "backup_count"):
         value = logging_cfg.get(key)

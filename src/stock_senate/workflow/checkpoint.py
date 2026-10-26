@@ -139,9 +139,7 @@ def store_from_config(
         return None
     backend = str(section.get("backend") or "sqlite").lower()
     if backend not in SUPPORTED_BACKENDS:
-        log.warning(
-            "checkpoint backend %r is not supported; checkpoints stay off", backend
-        )
+        log.warning("checkpoint backend %r is not supported; checkpoints stay off", backend)
         return None
     raw = str(section.get("path") or "").strip()
     if not raw:

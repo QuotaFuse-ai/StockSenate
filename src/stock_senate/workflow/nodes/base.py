@@ -166,6 +166,8 @@ def run_role(ctx: RunContext, role: str, context: Mapping[str, Any]) -> BaseMode
         )
     except BudgetExceeded as exc:
         ctx.budget_tripped = str(exc)
+        if ctx.budget.on_exceed == "fail":
+            raise BudgetExceeded(f"预算熔断（on_exceed=fail）：{exc}") from exc
         payload = _fallback_payload(spec, context, f"预算熔断：{exc}")
     except LLMRateLimited:
         raise
