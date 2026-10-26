@@ -57,6 +57,12 @@ def cli_env(
     env = os.environ.copy()
     env["PYTHONPATH"] = str(SRC) + os.pathsep + env.get("PYTHONPATH", "")
     env["PYTHONIOENCODING"] = "utf-8"
+    # GitHub Actions sets GITHUB_ACTIONS, which makes Typer force Rich's
+    # terminal renderer even when piped. Its option highlighter then splits
+    # "--start" into two styled runs ("-" + "-start"), so plain substring
+    # assertions see ANSI escapes instead of the literal flag. Typer's own
+    # switch for this keeps captured output identical on every runner.
+    env["_TYPER_FORCE_DISABLE_TERMINAL"] = "1"
     env["STOCKSENATE_LLM_PROVIDER"] = "offline"
     env["STOCKSENATE_DATA_MODE"] = data_mode
     if home is not None:
