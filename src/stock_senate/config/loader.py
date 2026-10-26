@@ -181,6 +181,18 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             "checkpoints": ["after_trader", "before_final"],
             "on_timeout": "auto_approve",
         },
+        "checkpoint": {
+            "enabled": False,
+            "backend": "sqlite",
+            "path": "~/.stock_senate/checkpoints.sqlite",
+            "resume_by": ["code", "date", "config_hash"],
+        },
+        "logging": {
+            "file_enabled": False,
+            "file_path": "~/.stock_senate/logs/stock_senate.jsonl",
+            "max_bytes": 10 * 1024 * 1024,
+            "backup_count": 5,
+        },
         "quality_gate": {"enabled": True, "threshold": 70, "block_on_fail": False},
         "budget": {"max_llm_calls": 60, "max_total_tokens": 400000, "max_wall_clock_seconds": 1800},
     },

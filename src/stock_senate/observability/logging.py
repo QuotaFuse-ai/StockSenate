@@ -17,11 +17,14 @@ import contextlib
 import contextvars
 import json
 import logging
+import logging.handlers
+import os
 import re
 import sys
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 LOGGER_NAME = "stock_senate"
@@ -175,7 +178,7 @@ def configure(
         for handler in list(logger.handlers):
             logger.removeHandler(handler)
             handler.close()
-    if not logger.handlers:
+    if not _sinks(logger, _STREAM_SINK):
         handler = logging.StreamHandler(stream or sys.stderr)
         if json_output:
             handler.setFormatter(JsonFormatter())
@@ -183,13 +186,93 @@ def configure(
             handler.setFormatter(
                 logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
             )
+        setattr(handler, _SINK_ATTR, _STREAM_SINK)
         logger.addHandler(handler)
     return logger
 
 
+_SINK_ATTR = "_stock_senate_sink"
+_STREAM_SINK = "stream"
+_FILE_SINK = "file"
+
+
+def _sinks(logger: logging.Logger, kind: str) -> list[logging.Handler]:
+    return [h for h in logger.handlers if getattr(h, _SINK_ATTR, None) == kind]
+
+
+def configure_file_sink(
+    path: str | Path,
+    *,
+    max_bytes: int = 10 * 1024 * 1024,
+    backup_count: int = 5,
+    json_output: bool = True,
+) -> Path:
+    """Mirror the package logger into a rotating UTF-8 file.
+
+    Repeating the call with the same target is a no-op, so every run can call
+    it. The JSON formatter is reused, which means the file gets the same
+    redaction as stderr; nothing is ever written to stdout.
+    """
+    target = Path(path).expanduser()
+    logger = logging.getLogger(LOGGER_NAME)
+    resolved = str(target.resolve())
+    for handler in _sinks(logger, _FILE_SINK):
+        if getattr(handler, "baseFilename", None) == resolved:
+            return target
+        logger.removeHandler(handler)
+        handler.close()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    handler = logging.handlers.RotatingFileHandler(
+        target,
+        maxBytes=max(1, int(max_bytes)),
+        backupCount=max(0, int(backup_count)),
+        encoding="utf-8",
+    )
+    if json_output:
+        handler.setFormatter(JsonFormatter())
+    else:
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    setattr(handler, _SINK_ATTR, _FILE_SINK)
+    logger.addHandler(handler)
+    return target
+
+
+def configure_from_config(
+    config: Mapping[str, Any] | None,
+    *,
+    json_output: bool = True,
+) -> Path | None:
+    """Enable the file sink when ``workflow.logging`` asks for it.
+
+    Off by default: a stock install keeps logging to stderr only, and a test
+    run never drops files into the operator's home. ``STOCKSENATE_LOG_FILE``
+    enables the sink without touching any configuration file.
+    """
+    section = (((config or {}).get("workflow") or {}).get("logging")) or {}
+    env_path = str(os.environ.get("STOCKSENATE_LOG_FILE") or "").strip()
+    target = env_path or str(section.get("file_path") or "").strip()
+    enabled = bool(env_path) or section.get("file_enabled") is True
+    logger = logging.getLogger(LOGGER_NAME)
+    if not enabled or not target:
+        for handler in _sinks(logger, _FILE_SINK):
+            logger.removeHandler(handler)
+            handler.close()
+        return None
+    path = Path(target).expanduser()
+    if not path.is_absolute():
+        base = str((config or {}).get("home") or "").strip()
+        path = (Path(base).expanduser() if base else Path.cwd()) / path
+    return configure_file_sink(
+        path,
+        max_bytes=int(section.get("max_bytes") or 10 * 1024 * 1024),
+        backup_count=int(section.get("backup_count") or 5),
+        json_output=json_output,
+    )
+
+
 def get_logger(name: str | None = None) -> logging.Logger:
     base = logging.getLogger(LOGGER_NAME)
-    if not base.handlers:
+    if not _sinks(base, _STREAM_SINK):
         configure()
     return logging.getLogger(f"{LOGGER_NAME}.{name}" if name else LOGGER_NAME)
 
@@ -210,6 +293,8 @@ __all__ = [
     "JsonFormatter",
     "audit",
     "configure",
+    "configure_file_sink",
+    "configure_from_config",
     "get_logger",
     "get_trace_id",
     "new_trace_id",

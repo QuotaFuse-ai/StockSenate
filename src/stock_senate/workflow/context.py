@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -13,8 +12,6 @@ from stock_senate.roles.llm import RoleLLMResolver
 from stock_senate.roles.registry import RoleRegistry
 from stock_senate.roles.tool_gate import ToolGate
 from stock_senate.workflow.budget import Budget
-
-HitlHandler = Callable[[str, Mapping[str, Any]], Mapping[str, Any]]
 
 
 @dataclass
@@ -31,7 +28,6 @@ class RunContext:
     budget: Budget
     trace_id: str
     home: Path
-    hitl_handler: HitlHandler | None = None
     budget_tripped: str = ""
     skipped: list[dict[str, str]] = field(default_factory=list)
     usage: list[dict[str, Any]] = field(default_factory=list)
@@ -55,4 +51,4 @@ class RunContext:
         return summarize(self.envelopes)
 
 
-__all__ = ["HitlHandler", "RunContext"]
+__all__ = ["RunContext"]

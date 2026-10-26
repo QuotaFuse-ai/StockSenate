@@ -16,6 +16,7 @@ class Budget:
     max_calls: int = 60
     max_tokens: int = 400_000
     max_seconds: float = 1800.0
+    on_exceed: str = "stop"
     calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -53,6 +54,7 @@ class Budget:
             "max_calls": self.max_calls,
             "max_tokens": self.max_tokens,
             "max_seconds": self.max_seconds,
+            "on_exceed": self.on_exceed,
             "stopped_reason": self.stopped_reason,
         }
 
@@ -71,6 +73,7 @@ def budget_from_config(config: dict[str, Any]) -> Budget:
         max_seconds=float(
             workflow.get("max_wall_clock_seconds", per_run.get("max_wall_clock_seconds", 1800))
         ),
+        on_exceed=str(per_run.get("on_exceed") or "stop").strip().lower(),
     )
 
 

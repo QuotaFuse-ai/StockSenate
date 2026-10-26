@@ -268,12 +268,13 @@ def test_rate_limited_analyze_exits_7(monkeypatch: pytest.MonkeyPatch) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_malformed_date_is_a_usage_error(tmp_path: Path) -> None:
+@pytest.mark.parametrize("value", ["2026-13-99", "not-a-date"])
+def test_malformed_date_is_a_usage_error(tmp_path: Path, value: str) -> None:
     result = run_cli(
         "analyze",
         CODE,
         "--date",
-        "not-a-date",
+        value,
         "--output",
         "json",
         env=full_env(tmp_path),

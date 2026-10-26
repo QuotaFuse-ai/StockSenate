@@ -51,7 +51,9 @@ ssenate analyze 600519 --date 2026-10-24 --output json
 | `--weight` | 空 | `角色键=权重`，可重复，如 `custom_macro=0.6` |
 | `--no-hitl` | 关闭 | 跳过人工检查点；报告中记录 `auto_approved` |
 
-退出码：成功 `0`；决策被标 `partial` 时 `8`；全源失败 `4`；配置非法 `3`。
+退出码：成功 `0`；决策被标 `partial` 时 `8`；全源失败 `4`；配置非法 `3`；日期不是合法日历日（如 `2026-13-99`）`2`。
+
+人工复核（HITL）：默认在 `after_trader` 与 `before_final` 两个检查点暂停。**仅当 stdin 是 TTY** 时弹出交互提示（`a` 同意 / `r` 驳回 / `m` 修改 / `q` 中止，回车=同意），并按 `[hitl].timeout_seconds` 真实计时，超时落到 `on_timeout`（`auto_approve` 或 `abort`）。管道、cron、MCP、队列与 WebUI 等非交互入口不会阻塞，直接记录 `auto_approve` 与原因；`[hitl].enabled = false` 或 `--no-hitl` 时检查点标记为 `skipped`。
 
 ### 2.2 `ssenate role`
 
@@ -163,7 +165,7 @@ final_state, decision = graph.propagate("600519", "2026-10-24")
 契约：
 
 - `propagate(code, date)` 位置参数与返回 `(final_state, decision)` 不变。
-- `hitl=` 与 `overrides=` 是仅关键字扩展参数，不影响既有调用方式。
+- `hitl=`、`hitl_handler=` 与 `overrides=` 是仅关键字扩展参数，不影响既有调用方式。
 - `decision` 至少包含 `rating`（Buy/Hold/Sell）、`reason`、A 股约束标记；不含任何可执行价位。
 - 报告文件是衍生输出，**不是**返回值。
 
@@ -210,6 +212,7 @@ final_state, decision = graph.propagate("600519", "2026-10-24")
 | `STOCKSENATE_ALERT_WEBHOOK` / `STOCKSENATE_ALERT_WEBHOOK_SECRET` | 告警回调地址与签名密钥 |
 | `STOCKSENATE_SQL_DSN` | SQL Provider 连接串（只读账号） |
 | `STOCKSENATE_TRACE_EXPORTER` | `none` / `otlp` / `langfuse` |
+| `STOCKSENATE_LOG_FILE` | 日志文件路径；设置即启用轮转 file sink（优先于 `[logging].file_enabled`） |
 
 兼容：旧前缀 `QF_COUNCIL_*`、`TRADINGAGENTS_*` 仍可读，**新前缀优先**，并在 stderr 提示迁移。
 
@@ -220,7 +223,7 @@ final_state, decision = graph.propagate("600519", "2026-10-24")
 | 文件 | 关键键 |
 |---|---|
 | `agent_roles.toml` | `[roles.*]`（kind/prompt/tools/output_schema/enabled）、`[limits]`（max_roles=12、max_custom_roles=5）、`[tool_permissions]` |
-| `workflow.toml` | `[topology]`、`[debate]`、`[hitl]`、`[checkpoint]`、`[incremental]`、`[quality_gate]`、`[compression]`、`[budget]` |
+| `workflow.toml` | `[topology]`、`[debate]`、`[hitl]`、`[checkpoint]`、`[incremental]`、`[quality_gate]`、`[compression]`、`[budget]`、`[logging]` |
 | `output_template.toml` | `[sections.*]`、`forbidden_fields`、`[export]`、`[disclaimer]` |
 | `data_source.toml` | `[global]`（mode/forbid_llm_fill）、`[providers.*]`、`[routing]`、`[freshness]` |
 | `llm_config.toml` | `[llm]` 七个基础键、`[llm.role_llms]`、`[llm.allowed_keys]`、`[llm.structured_output]` |
@@ -228,6 +231,18 @@ final_state, decision = graph.propagate("600519", "2026-10-24")
 | `budget.toml` | `[per_run]`、`[per_queue]`、`[daily]`、`[circuit_breaker]`、`[pricing]` |
 
 `llm.role_llms` 合法键共 16 个（见 §2.2）；写错键 → `config validate` 退出 `3`，**不会静默回退默认模型**。
+
+### 7.1 断点续跑（`[checkpoint]`）
+
+`enabled = true` 后，每个完成的阶段（分析师、多空辩论、研究经理、交易员、HITL 记录、风险辩论、终审、质量门）都会把产物写入 `path` 指向的 SQLite，键为 `code|date|config_hash`。中断的同一标的/日期/配置再次运行 `ssenate analyze` 时，已完成的节点直接复用、不重复调用模型；`resume_by` 默认 `["code","date","config_hash"]`，改配置会产生新键。运行成功后该键的所有行会被清除，**已完成的运行不会被旧断点命中**。默认 `enabled = false`，不落盘。
+
+### 7.2 日志文件（`[logging]`）
+
+默认只写 stderr（JSON 行，字段脱敏）。`file_enabled = true`（或设置 `STOCKSENATE_LOG_FILE`）时，同一份 JSON 额外镜像到 `file_path` 的轮转文件，按 `max_bytes` / `backup_count` 滚动；stdout 始终不写日志。相对 `file_path` 按状态根目录（`STOCKSENATE_HOME`）解析。
+
+### 7.3 预算命中行为（`[budget].per_run.on_exceed`）
+
+`on_exceed = "stop"`（默认）命中上限时终止当前角色调用，以 fallback 继续并让决策标 `partial`；`on_exceed = "fail"` 直接抛出预算错误（CLI 退出 `8`，stderr 标明 `on_exceed=fail`），队列任务不重试。生效值写入运行快照 `budget.on_exceed`。
 
 ---
 

@@ -36,6 +36,14 @@ path = "~/.stock_senate/checkpoints.sqlite"
 # 同一 code+date 的断点可恢复，避免重复消耗 LLM 调用。
 resume_by = ["code", "date", "config_hash"]
 
+[logging]
+# 默认只写 stderr；开启后同一份 JSON 日志会镜像到轮转文件。
+# 相对路径按 state 根目录解析；例如 logs/stock_senate.jsonl。
+file_enabled = false
+file_path = "~/.stock_senate/logs/stock_senate.jsonl"
+max_bytes = 10485760
+backup_count = 5
+
 [incremental]
 # 增量分析：已有同日同标的报告时复用未变化的数据域。
 enabled = true

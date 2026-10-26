@@ -13,8 +13,10 @@ reading the report can tell a real approval from a timeout.
 
 from __future__ import annotations
 
+import sys
+import threading
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, TextIO
 
 from stock_senate.data.envelope import now_iso
 
@@ -60,15 +62,18 @@ class HitlReviewer:
             )
             return record
         try:
-            answer = self.handler(checkpoint, payload)
+            answer = self._ask(checkpoint, payload)
         except TimeoutError:
             if self.on_timeout == "abort":
-                record.update(decision="abort", note="人工确认超时，按 abort 终止")
+                record.update(
+                    decision="abort",
+                    note=f"人工确认超时（{self.timeout_seconds:g}s），按 abort 终止",
+                )
                 return record
             record.update(
                 decision="auto_approve",
                 auto_approved=True,
-                note="人工确认超时，按 auto_approve 放行",
+                note=f"人工确认超时（{self.timeout_seconds:g}s），按 auto_approve 放行",
             )
             return record
         answer = dict(answer or {})
@@ -81,6 +86,44 @@ class HitlReviewer:
             if key in answer:
                 record[key] = answer[key]
         return record
+
+    def _ask(self, checkpoint: str, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Ask the handler, enforcing ``timeout_seconds`` with a real deadline.
+
+        The handler runs in a daemon thread so a stalled reviewer cannot hold the
+        run past its deadline; the thread is abandoned, not joined, on timeout.
+        A non-positive ceiling disables the deadline.
+        """
+        handler = self.handler
+        assert handler is not None
+        if self.timeout_seconds <= 0:
+            return handler(checkpoint, payload)
+        box: dict[str, Any] = {}
+        done = threading.Event()
+
+        def run() -> None:
+            try:
+                box["answer"] = handler(checkpoint, payload)
+            except BaseException as exc:  # noqa: BLE001 - re-raised on the caller's thread
+                box["error"] = exc
+            finally:
+                done.set()
+
+        threading.Thread(target=run, name="hitl-review", daemon=True).start()
+        if not self._await(done):
+            raise TimeoutError(f"人工确认超过 {self.timeout_seconds:g}s")
+        error = box.get("error")
+        if error is not None:
+            raise error
+        return box.get("answer") or {}
+
+    def _await(self, done: threading.Event) -> bool:
+        try:
+            return done.wait(self.timeout_seconds)
+        except KeyboardInterrupt as exc:
+            # Ctrl-C lands on the waiting thread, not on ``input()`` in the
+            # worker; treat it as "no answer" so ``on_timeout`` still governs.
+            raise TimeoutError("收到中断信号") from exc
 
     def summary(self, traces: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         return {
@@ -95,4 +138,59 @@ def hitl_blocked(traces: Sequence[Mapping[str, Any]]) -> bool:
     return any(item.get("decision") in {"rejected", "abort"} for item in traces)
 
 
-__all__ = ["HitlReviewer", "Reviewer", "hitl_blocked"]
+def interactive_handler(*, out: TextIO | None = None) -> Reviewer:
+    """Build the terminal reviewer used by ``ssenate analyze``.
+
+    Prompts go to stderr so ``--output json`` stays machine readable. EOF or
+    Ctrl-C means the human did not answer and is raised as ``TimeoutError``, so
+    the checkpoint follows ``workflow.hitl.on_timeout`` instead of hanging.
+    """
+    stream = out or sys.stderr
+    labels = {"after_trader": "交易计划已完成", "before_final": "终审前"}
+    allowed = {"rating", "direction", "horizon"}
+
+    def ask(prompt: str) -> str:
+        print(prompt, file=stream, end="", flush=True)
+        return input()
+
+    def handler(checkpoint: str, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        research = payload.get("research") or {}
+        trade = payload.get("trade") or {}
+        print(
+            f"\n[人工复核] {labels.get(checkpoint, checkpoint)}："
+            f"{payload.get('code', '')} {payload.get('date', '')}"
+            f"  研究立场={research.get('stance', 'unknown')}"
+            f"  交易方向={trade.get('direction', 'unknown')}",
+            file=stream,
+        )
+        for _ in range(3):
+            try:
+                choice = (
+                    ask("请选择：a 同意 / r 驳回 / m 修改 / q 中止（回车=同意）> ").strip().lower()
+                )
+            except (EOFError, KeyboardInterrupt) as exc:
+                raise TimeoutError("未收到人工确认") from exc
+            if choice in {"", "a", "y", "同意"}:
+                return {"decision": "approved"}
+            if choice in {"r", "n", "驳回"}:
+                return {"decision": "rejected", "note": "人工驳回"}
+            if choice in {"q", "中止"}:
+                return {"decision": "abort", "note": "人工中止"}
+            if choice in {"m", "修改"}:
+                try:
+                    raw = ask("修改项（如 rating=hold direction=hold，回车跳过）> ").strip()
+                except (EOFError, KeyboardInterrupt) as exc:
+                    raise TimeoutError("未收到人工修改") from exc
+                answer: dict[str, Any] = {"decision": "approved", "note": "人工修改"}
+                for part in raw.split():
+                    key, _, value = part.partition("=")
+                    if key in allowed and value:
+                        answer[key] = value
+                return answer
+            print("未识别的选项，请重新输入。", file=stream)
+        raise TimeoutError("连续多次未收到有效选择")
+
+    return handler
+
+
+__all__ = ["HitlReviewer", "Reviewer", "hitl_blocked", "interactive_handler"]

@@ -83,6 +83,10 @@ def run_cli(
         [sys.executable, "-m", "stock_senate", *args],
         cwd=ROOT,
         env=env or cli_env(),
+        # A closed empty pipe, not DEVNULL: on Windows DEVNULL is a character
+        # device and sys.stdin.isatty() still reports True, which would let the
+        # CLI block on an interactive HITL prompt that no runner can answer.
+        input="",
         capture_output=True,
         text=True,
         encoding="utf-8",

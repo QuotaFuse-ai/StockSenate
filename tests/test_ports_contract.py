@@ -80,6 +80,8 @@ def test_compose_healthcheck_hits_a_route_the_app_serves(
     from stock_senate.webui.launch import create_app
     from stock_senate.webui.state import WebRuntime
 
+    assert compose_healthcheck_path() == "/healthz"
+
     monkeypatch.setenv("STOCKSENATE_HOME", str(tmp_path / "home"))
     monkeypatch.delenv("STOCKSENATE_WEBUI_PASSWORD", raising=False)
     config = tmp_path / "config"

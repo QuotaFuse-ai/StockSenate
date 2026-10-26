@@ -377,3 +377,24 @@ def test_role_list_json_matches_the_configured_roles(workspace: Workspace) -> No
         "portfolio_manager",
         "quality_gate",
     }
+
+
+def test_role_list_survives_a_cp1252_console(workspace: Workspace) -> None:
+    """A legacy Windows console must not turn Chinese output into a crash."""
+    env = workspace.env()
+    env["PYTHONIOENCODING"] = "cp1252"
+
+    result = run_cli(
+        "role",
+        "list",
+        "--config",
+        str(CONFIG),
+        "--output",
+        "json",
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    rows = parse_json(result)  # run_cli decodes stdout as UTF-8
+    assert len(rows) == 16
+    assert all(str(row["display_name"]).strip() for row in rows)

@@ -41,6 +41,7 @@ from stock_senate.data.envelope import date_only, now_iso
 from stock_senate.observability.logging import audit, get_logger, redact
 from stock_senate.roles.llm import LLMConfigError, LLMRateLimited
 from stock_senate.roles.registry import RoleError
+from stock_senate.workflow.budget import BudgetExceeded
 
 from . import locks
 
@@ -518,7 +519,8 @@ class _Drain:
                     return
                 attempt += 1
                 continue
-            except (LLMConfigError, RoleError, ValueError) as exc:
+            except (LLMConfigError, RoleError, ValueError, BudgetExceeded) as exc:
+                # A budget trip is deterministic for this job, not transient.
                 self._fail(job_id, exc, retryable=False)
                 return
             except Exception as exc:  # noqa: BLE001 - retried, then recorded

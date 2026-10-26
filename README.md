@@ -37,7 +37,7 @@ StockSenate 自身只负责「多智能体合议 + 回测推演」。
 | 分析师 | 7 个（市场/舆情/新闻/基本面 + 政策/游资/解禁），角色提示词内置，输出 Schema 强约束 |
 | 辩论与决策 | 多空辩论 → 研究经理 → 交易员 → 三档风控 → 投决，含收敛打分、可配置拓扑、interrupt 人工审批 |
 | 模型配置 | 快/深两档 + `role_llms` 细粒度，角色键位稳定 |
-| 断点恢复 | SQLite/Postgres checkpoint 与增量分析 |
+| 断点恢复 | SQLite checkpoint 中断续跑（默认关闭）与增量分析 |
 | 报告 | `summary.json` + `complete_report.md` + Markdown/PDF，含结构化版本快照、字段级 Diff、多格式输出 |
 | 决策统计 | `performance` 事后归因保持独立口径；回测引擎是单独能力，两者分开验收 |
 | 交互 | CLI + 独立 WebUI（独立进程/端口/鉴权）+ MCP Server（stdio/http） |
@@ -328,7 +328,8 @@ ssenate mcp http --port 8765
 | [docs/specs/priority.md](docs/specs/priority.md) | P0 / P1 / P2 优先级与排期 |
 | [docs/specs/cli-reference.md](docs/specs/cli-reference.md) | 全部 CLI / Python API / MCP 命令与退出码 |
 | [docs/decisions/](docs/decisions/) | 命名、数据层、端口等架构决策（只增不改） |
-| `councli.docx` / `councli文档.docx` | 需求原始文档（v1.1 / v1.2） |
+
+需求基线与逐任务的开发过程记录（验收证据、审计报告）不随仓库发布，存放于团队私有归档，见 DEC-013。
 
 ---
 
@@ -341,6 +342,12 @@ ruff check .
 mypy src
 python -m build
 ```
+
+测试口径：`pytest` 只依赖 `.[dev]`，不安装任何可选 extra，也不需要外部服务、网络或
+API Key；用例全部走本地 fixture 与 offline provider。在 Python 3.12 的全新 venv（仅装
+`.[dev]`，无 `tickhub-cn`）中 273 例、272 passed；唯一红灯是 `--date 2026-13-99` 未按
+约定返回 exit 2（后端日期校验缺陷，测试已按契约写死）。Windows 传统控制台
+（`PYTHONIOENCODING=cp1252`）下 `role list --output json` 依然输出 UTF-8 JSON。
 
 CI 覆盖：`pytest` + `ruff` + `mypy` + `pip-audit` + 全提供商同环境 import smoke test + 打包检查。
 依赖锁定使用 `uv.lock`；发布包只声明最小依赖范围。

@@ -142,6 +142,14 @@ def _mapped_errors(prefix: str) -> Iterator[None]:
         raise _fail(f"{prefix}：{exc}", code) from exc
 
 
+def _stdin_is_interactive() -> bool:
+    """Only prompt for HITL when a human can actually answer."""
+    try:
+        return bool(sys.stdin and sys.stdin.isatty())
+    except (AttributeError, ValueError):
+        return False
+
+
 def _config_dir() -> Path:
     override = os.environ.get("STOCKSENATE_CONFIG_DIR")
     if override:
@@ -243,12 +251,19 @@ def analyze(
 ) -> None:
     """运行一次完整的多角色合议分析。"""
     from stock_senate.graph.senate_graph import SenateGraph
+    from stock_senate.workflow.hitl import interactive_handler
 
     overrides = {"enable": enable or [], "disable": disable or [], "weights": weight or []}
+    hitl_enabled = not no_hitl
+    handler = interactive_handler() if hitl_enabled and _stdin_is_interactive() else None
     with _mapped_errors("analyze"):
         graph = SenateGraph(config=_load_config_dir(config))
         state, decision = graph.propagate(
-            code, date or _today(), hitl=not no_hitl, overrides=overrides
+            code,
+            date or _today(),
+            hitl=hitl_enabled,
+            hitl_handler=handler,
+            overrides=overrides,
         )
     payload = {
         "code": code,
