@@ -193,6 +193,18 @@ class SenateGraph:
             ctx.skipped[:] = [dict(item) for item in run_state.get("skipped") or []]
             ctx.budget_tripped = str(run_state.get("budget_tripped") or "")
 
+        def _discard_checkpoint() -> None:
+            """Drop rows no later run can reach.
+
+            A configuration or role error is only fixed by editing the
+            configuration, which changes ``config_hash``: the rows left under
+            the old key can never be resumed, so keeping them is pure litter.
+            Interrupts and rate limits keep their rows because the retry
+            resumes under the same key.
+            """
+            if checkpoints is not None:
+                checkpoints.clear(code=code, date=as_of, config_hash=config_hash)
+
         def saved(stage_name: str, payload: Mapping[str, Any]) -> None:
             if checkpoints is None:
                 return
@@ -375,14 +387,17 @@ class SenateGraph:
             log.warning("run %s rate limited: %s", run_id, exc)
             raise
         except LLMConfigError as exc:
+            _discard_checkpoint()
             _progress(progress, stage, "failed", error=str(redact(exc)))
             log.error("run %s configuration error: %s", run_id, exc)
             raise
         except NodeConfigError as exc:
+            _discard_checkpoint()
             _progress(progress, stage, "failed", error=str(redact(exc)))
             log.error("run %s role configuration error: %s", run_id, exc)
             raise
         except RoleError as exc:
+            _discard_checkpoint()
             _progress(progress, stage, "failed", error=str(redact(exc)))
             log.error("run %s role override error: %s", run_id, exc)
             raise

@@ -9,7 +9,9 @@ The contract these tests pin:
 * the resumed result is identical to an uninterrupted run of the same code,
   date and configuration;
 * a finished run clears its rows, ``resume=False`` replays everything, and a
-  changed HITL mode never reuses a trace recorded under the other mode.
+  changed HITL mode never reuses a trace recorded under the other mode;
+* a configuration failure drops its rows (the fixed configuration changes the
+  key, so they are unreachable), while a rate limit keeps them for the retry.
 """
 
 from __future__ import annotations
@@ -25,7 +27,9 @@ import pytest
 import stock_senate.graph.senate_graph as graph_module
 from stock_senate import SenateGraph
 from stock_senate.config.loader import load_config
+from stock_senate.roles.llm import LLMRateLimited
 from stock_senate.workflow.checkpoint import CheckpointStore, store_from_config
+from stock_senate.workflow.nodes.base import NodeConfigError
 
 CODE = "600519"
 DAY = "2026-10-24"
@@ -208,6 +212,44 @@ def test_a_changed_hitl_mode_does_not_reuse_another_modes_trace(
         "enabled": True,
         "resumed": ["analysts", "debate", "research", "trader"],
     }
+
+
+def test_a_configuration_error_discards_the_checkpoint(
+    offline_home: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    graph = SenateGraph(config=_checkpoint_config(tmp_path))
+    store = CheckpointStore(tmp_path / "checkpoints.sqlite")
+    config_hash = str(graph.config["config_hash"])
+
+    def broken(*args: Any, **kwargs: Any) -> Any:
+        raise NodeConfigError("reviewer role has no model")
+
+    monkeypatch.setattr(graph_module, "run_trader", broken)
+    with pytest.raises(NodeConfigError, match="no model"):
+        graph.propagate(CODE, DAY, hitl=False)
+
+    # Earlier stages ran and saved rows, but the fixed configuration will
+    # change ``config_hash``, so those rows could never be resumed again.
+    assert not store.load(code=CODE, date=DAY, config_hash=config_hash)
+
+
+def test_a_rate_limited_run_keeps_its_checkpoint_for_the_retry(
+    offline_home: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    graph = SenateGraph(config=_checkpoint_config(tmp_path))
+    store = CheckpointStore(tmp_path / "checkpoints.sqlite")
+    config_hash = str(graph.config["config_hash"])
+
+    def limited(*args: Any, **kwargs: Any) -> Any:
+        raise LLMRateLimited("rate limited", retry_after=2.0)
+
+    monkeypatch.setattr(graph_module, "run_trader", limited)
+    with pytest.raises(LLMRateLimited):
+        graph.propagate(CODE, DAY, hitl=False)
+
+    # The retry runs under the same key, so the completed stages stay.
+    pending = store.load(code=CODE, date=DAY, config_hash=config_hash)
+    assert set(pending.stages) >= {"analysts", "debate", "research", "_run_state"}
 
 
 def test_store_roundtrip_and_a_corrupt_row_is_ignored(tmp_path: Path) -> None:
