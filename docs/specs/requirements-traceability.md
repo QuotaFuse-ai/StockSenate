@@ -213,7 +213,7 @@
 | 17 | `pip install stocksenate`，Python ≥3.11 | `pyproject.toml` | 安装 | 干净环境安装成功 | P0 | 已实现（QUOT-56：干净 venv `pip install .` 后 `ssenate --version` / 离线 `analyze` 通过） |
 | 17 | extras `[stockdata] [mcp] [webui] [all]` | `pyproject.toml` | 安装 | 每个 extra 单独可装 | P0 | 已实现（`[backtest]` 已移除：回测无 pandas/numpy import，见 DEC-009） |
 | 17 | 不提供 `[google]`，httpx 冲突解法写进文档 | `pyproject.toml`、`README.md`、DEC-007 | 文档 | 依赖树无冲突 | P0 | 已实现 |
-| 17 | `python -m build` + `twine upload` | `.github/workflows/release.yml` | CI | `twine check` 通过 | P1 | 已实现（tag `v*` 触发：build → `twine check` → artifact；仅当仓库 secret `PYPI_API_TOKEN` 存在时上传，缺失则跳过并提示配置；工作流不含任何凭据） |
+| 17 | `python -m build` + `twine upload` | `.github/workflows/release.yml` | CI | `twine check` 通过 | P1 | 已实现（tag `v*` 触发：build → `twine check` → artifact → Trusted Publishing 上传；publish job 使用 `environment: pypi` + `id-token: write`，由 PyPI 签发短期凭据，不需要 `PYPI_API_TOKEN` 或任何仓库 secret，见 DEC-011） |
 | 17 | NOTICE / LICENSE / Apache-2.0 归属 | `LICENSE`、`NOTICE` | 仓库 | 发布包内含两文件 | P0 | 已实现 |
 
 ## 十八、测试、部署、边界与里程碑（§18）

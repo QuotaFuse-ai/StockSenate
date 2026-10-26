@@ -32,3 +32,9 @@
 
 - `pyproject.toml`、README、`docs/specs/*` 已全部使用 `stocksenate`，无代码或文档改动。
 - D-01 的补记据此成立：改名是团队决定，开发文档未改。
+
+## 核验（2026-10-26，外网可用）
+
+- `stocksenate` 在 PyPI 未被占用：`https://pypi.org/pypi/stocksenate/json` 返回 404，`pip index versions stocksenate` 返回 No matching distribution。「未解决」第一条至此关闭。
+- PyPI 已登记 pending publisher：项目 `stocksenate` / 仓库 `QuotaFuse-ai/StockSenate` / workflow `release.yml` / environment `pypi`。
+- `release.yml` 相应改为 Trusted Publishing（`environment: pypi`、`id-token: write`、`pypa/gh-action-pypi-publish`），不再依赖 `PYPI_API_TOKEN`；首次 `v*` tag 发布成功后 pending publisher 自动转正。
