@@ -58,4 +58,4 @@ def test_engine_runs_and_persists_the_returned_decision(offline_home: Path) -> N
 
 
 def test_version_is_exported() -> None:
-    assert __version__ == "0.1.0"
+    assert __version__ == "1.0.0"
