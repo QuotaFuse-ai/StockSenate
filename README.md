@@ -128,10 +128,11 @@ pip install "stocksenate[all]"       # 全功能
 pip install -e ".[dev]"              # 开发
 ```
 
-可选 extras：`stockdata`（TickHub 本地直连）、`backtest`（回测数值栈）、`mcp`（MCP Server）、`webui`（Starlette + uvicorn 控制台，见 DEC-008）、`all`。
+可选 extras：`stockdata`（TickHub 本地直连）、`mcp`（MCP Server）、`webui`（Starlette + uvicorn 控制台，见 DEC-008）、`all`。回测为纯 Python 实现，无独立 extra。
 
 ```bash
-cp .env.example .env    # 填入你选择的 LLM API Key
+cp .env.example .env          # 按文件内【必填】备注填写，模板不含任何真实密钥
+set -a; . ./.env; set +a      # 程序不自动读取 .env，需先导出到环境变量
 ssenate config validate
 ```
 

@@ -98,7 +98,7 @@
 | 7.1 | 不在本组件实现采集/缓存/代理/降级 | `README.md` §职责边界 | — | 代码扫描无采集实现 | P0 | 已实现 |
 | 7.2 | Provider：TickHub-CN / TickHub-US / JSON / TextDoc / SQL / Composite | `data/providers/` | `data_source.toml` | 每个 provider 有契约测试 | P0 | 已实现（六类 provider 齐全；Newsieve 已移除，资讯三域由 TickHub-CN 承担） |
 | 7.2 | MCP stdio 与本地 import 双通道 | `data/providers/tickhub.py` | 配置 | 两种通道结果一致 | P0 | 已实现（`data/providers/tickhub.py`） |
-| 7.3 | `DataEnvelope` 九字段：domain/code/data_as_of/payload/source/source_detail/fetched_at/freshness/confidence/data_source_status | `data/envelope.py` | Python API / MCP | 字段与枚举单测；缺字段构造失败 | P0 | 已实现（`data/envelope.py`） |
+| 7.3 | `DataEnvelope` 十字段：domain/code/data_as_of/payload/source/source_detail/fetched_at/freshness/confidence/data_source_status | `data/envelope.py` | Python API / MCP | 字段与枚举单测；缺字段构造失败 | P0 | 已实现（`data/envelope.py`） |
 | 7.4 | 四模式 `stockdata/local/hybrid/priority` + 按域优先级 | `data/router.py` | 配置 / analyze | 每模式一条集成测试 | P0 | 已实现（`local` 集成测试；其余模式单测待补） |
 | 7.5 | 实时取数走 TickHub，不直连免费源 | `data/providers/tickhub.py` | analyze | 网络请求只发往 provider 端点 | P0 | 已实现（网络请求只发往 provider 端点） |
 | 7.6 | 本地 JSON 布局 `{domain}/{code}/{date}.json` | `data/providers/local_json.py` | 配置 | 缺文件→`missing`；坏 JSON→`degraded` | P0 | 已实现（`test_alerts`/`test_backtest` 夹具） |
