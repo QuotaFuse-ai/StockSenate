@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Check every HTTP(S) link in the reference documents.
+"""Check every HTTP(S) link in the project's Markdown documents.
 
 Usage:
     python scripts/check_links.py
-    python scripts/check_links.py docs/specs/references.md --timeout 5
+    python scripts/check_links.py README.md --timeout 5
     STOCKSENATE_SKIP_LINK_CHECK=1 python scripts/check_links.py
 
 The check follows redirects and accepts any final 2xx response. Hosts that
@@ -23,7 +23,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_TARGET = ROOT / "docs" / "specs" / "references.md"
+DEFAULT_TARGET = ROOT / "README.md"
 URL_PATTERN = re.compile(r"https?://[^\s<>()\[\]\"'`]+")
 TRAILING_PUNCTUATION = ".,;:!?、。；：）)]}"
 USER_AGENT = "StockSenate-link-check/1.0 (+https://github.com/QuotaFuse-ai/StockSenate)"
@@ -72,7 +72,7 @@ def probe(url: str, timeout: float) -> tuple[bool, str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Check HTTP(S) links in spec documents.")
+    parser = argparse.ArgumentParser(description="Check HTTP(S) links in Markdown documents.")
     parser.add_argument(
         "files",
         nargs="*",

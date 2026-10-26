@@ -55,7 +55,7 @@ desktop.ini
 *.pdf
 *.docx
 
-# Requirement originals and per-task working notes never enter the repo.
-# They live outside the checkout; DEC-013 records the removal.
+# Requirement originals and the docs tree never enter the repo.
+# They live in the team's private archive outside the checkout.
 councli*
-docs/tasks/
+docs/
