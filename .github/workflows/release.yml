@@ -1,0 +1,62 @@
+name: Release
+
+# Builds a wheel + sdist, validates both with twine, and publishes to PyPI.
+# Publication is opt-in: configure the repository secret PYPI_API_TOKEN
+# (Settings -> Secrets and variables -> Actions -> New repository secret) with
+# a PyPI API token. The workflow never stores a token itself; when the secret
+# is absent the upload step is skipped and only build + twine check run.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    env:
+      # Resolves to an empty string when the secret is not configured.
+      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install twine
+      # Uses PyPI's token user; the token comes only from the secret above.
+      - name: Publish to PyPI
+        if: env.PYPI_API_TOKEN != ''
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
+      - name: Skip publish (PYPI_API_TOKEN not configured)
+        if: env.PYPI_API_TOKEN == ''
+        run: |
+          echo "PYPI_API_TOKEN is not configured; skipping upload."
+          echo "Add the repository secret to enable publishing on tag pushes."
