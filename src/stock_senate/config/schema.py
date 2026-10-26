@@ -290,6 +290,19 @@ def _check_workflow(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
     if not isinstance(threshold, (int, float)) or not 0 <= threshold <= 100:
         _error(errors, "workflow.toml", "quality_gate.threshold", "必须在 0~100 之间")
 
+    queue = data.get("queue", {})
+    attempts = queue.get("max_attempts", 3)
+    if not isinstance(attempts, int) or attempts < 1:
+        _error(errors, "workflow.toml", "queue.max_attempts", "必须是 >= 1 的整数")
+    delay = queue.get("retry_delay_seconds", 5)
+    if not isinstance(delay, (int, float)) or delay < 0:
+        _error(errors, "workflow.toml", "queue.retry_delay_seconds", "必须是 >= 0 的数值")
+    if queue.get("on_failure", "skip") not in {"skip", "stop"}:
+        _error(errors, "workflow.toml", "queue.on_failure", "可选 skip / stop")
+    stale = queue.get("stale_running_seconds", 21600)
+    if not isinstance(stale, (int, float)) or stale <= 0:
+        _error(errors, "workflow.toml", "queue.stale_running_seconds", "必须是 > 0 的数值")
+
 
 def _check_data_source(
     data: dict[str, Any], errors: list[dict[str, str]], warnings: list[dict[str, str]]

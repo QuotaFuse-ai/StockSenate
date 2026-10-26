@@ -185,6 +185,8 @@ def analyze(
         output,
         rows=[{"code": code, "rating": decision.get("rating"), "action": decision.get("action")}],
     )
+    if (decision.get("data") or {}).get("status") == "missing":
+        raise typer.Exit(EXIT_DATA)
     if decision.get("partial"):
         raise typer.Exit(EXIT_PARTIAL)
 
@@ -205,8 +207,14 @@ def sync_news_cmd(
     output: str = typer.Option("table", "--output", "-o", help="table | json | csv"),
 ) -> None:
     """通过 Newsieve 拉取并过滤资讯。"""
-    provider = _require("stock_senate.data.providers.newsieve", "M1")
-    _emit(provider.sync(since=since), output)
+    provider = _require("stock_senate.data.providers.newsieve", "M3")
+    try:
+        payload = provider.sync(since=since)
+    except provider.ProviderNotAvailable as exc:
+        # Newsieve 是可选依赖：未安装时如实报告，不抛出裸 traceback。
+        _emit({"ok": False, "since": since, "reason": str(exc)}, output)
+        raise typer.Exit(EXIT_DATA)
+    _emit(payload, output)
 
 
 # --------------------------------------------------------------------------- #
@@ -308,16 +316,23 @@ def backtest_run(
     if not targets:
         raise _fail("backtest run 需要 --code 或 --codes")
     engine = _require("stock_senate.backtest.engine", "M3")
-    result = engine.run(
-        codes=targets,
-        start=start,
-        end=end,
-        window=window,
-        slippage=slippage,
-        fee=fee,
-        out_dir=out_dir,
-    )
+    try:
+        result = engine.run(
+            codes=targets,
+            start=start,
+            end=end,
+            window=window,
+            slippage=slippage,
+            fee=fee,
+            out_dir=out_dir,
+        )
+    except ValueError as exc:
+        raise _fail(f"backtest run 参数不合法：{exc}")
     _emit(result, output)
+    if (result.get("data") or {}).get("status") == "missing":
+        raise typer.Exit(EXIT_DATA)
+    if result.get("partial"):
+        raise typer.Exit(EXIT_PARTIAL)
 
 
 # --------------------------------------------------------------------------- #
@@ -355,7 +370,10 @@ def alert_test(
 ) -> None:
     """在最近一次数据上试跑告警规则，不推送。"""
     engine = _require("stock_senate.alerts.engine", "M2")
-    _emit(engine.dry_run(rule), output)
+    report = engine.dry_run(rule)
+    _emit(report, output)
+    if report.get("ok") is False:
+        raise typer.Exit(EXIT_USAGE)
 
 
 @alert_app.command("serve")
@@ -429,7 +447,7 @@ def queue_status(
     output: str = typer.Option("table", "--output", "-o"),
 ) -> None:
     """查看队列状态。"""
-    manager = _require("stock_senate.queue.manager", "M3")
+    manager = _require("stock_senate.queue.manager", "M2")
     _emit(manager.status(job_id), output)
 
 
@@ -440,7 +458,7 @@ def queue_submit(
     output: str = typer.Option("table", "--output", "-o"),
 ) -> None:
     """从 CSV 批量提交任务。"""
-    manager = _require("stock_senate.queue.manager", "M3")
+    manager = _require("stock_senate.queue.manager", "M2")
     _emit(manager.submit_file(file, concurrency=concurrency), output)
 
 
@@ -449,7 +467,7 @@ def queue_cancel(
     job_id: str = typer.Argument(..., help="任务 ID。"),
 ) -> None:
     """取消任务。"""
-    manager = _require("stock_senate.queue.manager", "M3")
+    manager = _require("stock_senate.queue.manager", "M2")
     manager.cancel(job_id)
     typer.echo(f"已取消 {job_id}")
 
@@ -459,7 +477,7 @@ def queue_pause(
     job_id: str = typer.Argument(..., help="任务 ID。"),
 ) -> None:
     """暂停任务。"""
-    manager = _require("stock_senate.queue.manager", "M3")
+    manager = _require("stock_senate.queue.manager", "M2")
     manager.pause(job_id)
     typer.echo(f"已暂停 {job_id}")
 
@@ -469,7 +487,7 @@ def queue_resume(
     job_id: str = typer.Argument(..., help="任务 ID。"),
 ) -> None:
     """恢复任务。"""
-    manager = _require("stock_senate.queue.manager", "M3")
+    manager = _require("stock_senate.queue.manager", "M2")
     manager.resume(job_id)
     typer.echo(f"已恢复 {job_id}")
 
@@ -482,7 +500,7 @@ def queue_resume(
 @mcp_app.command("stdio")
 def mcp_stdio() -> None:
     """以 stdio 启动 MCP Server；stdout 只输出 MCP 报文。"""
-    server = _require("stock_senate.mcp_server.server", "M2")
+    server = _require("stock_senate.mcp_server.server", "M3")
     server.run(transport="stdio")
 
 
@@ -492,7 +510,7 @@ def mcp_http(
     port: int = typer.Option(8765, "--port"),
 ) -> None:
     """以 Streamable HTTP 启动 MCP Server，默认仅本机并强制鉴权。"""
-    server = _require("stock_senate.mcp_server.server", "M2")
+    server = _require("stock_senate.mcp_server.server", "M3")
     server.run(transport="http", host=host, port=port)
 
 
@@ -555,21 +573,15 @@ def config_validate(
 @config_app.command("migrate")
 def config_migrate(
     dry_run: bool = typer.Option(False, "--dry-run", help="只显示将要迁移的内容。"),
+    output: str = typer.Option("table", "--output", "-o"),
 ) -> None:
     """把 ~/.tradingagents 只读迁移到 ~/.stock_senate。"""
-    import shutil
+    from stock_senate.config.loader import migrate_legacy
 
-    legacy = Path.home() / ".tradingagents"
-    target = _config_dir()
-    if not legacy.exists():
-        typer.echo("没有发现旧配置目录，无需迁移。")
-        return
-    if dry_run:
-        typer.echo(f"将复制 {legacy} -> {target}（旧目录保留只读）")
-        return
-    target.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(legacy, target, dirs_exist_ok=True)
-    typer.echo(f"已迁移到 {target}；旧目录 {legacy} 保留未动。")
+    report = migrate_legacy(_config_dir(), dry_run=dry_run)
+    _emit(report, output)
+    if report.get("error"):
+        raise typer.Exit(EXIT_CONFIG)
 
 
 def main() -> None:

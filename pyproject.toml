@@ -36,7 +36,7 @@ dependencies = [
 stockdata = ["tickhub-cn>=1.0"]
 backtest = ["pandas>=2.0", "numpy>=1.26"]
 mcp = ["mcp>=1.9"]
-webui = ["streamlit>=1.36", "pandas>=2.0"]
+webui = ["starlette>=0.37", "uvicorn>=0.30"]
 all = [
   "stocksenate[stockdata,backtest,mcp,webui]",
 ]

@@ -128,7 +128,7 @@ pip install "stocksenate[all]"       # 全功能
 pip install -e ".[dev]"              # 开发
 ```
 
-可选 extras：`stockdata`（TickHub 本地直连）、`backtest`（回测数值栈）、`mcp`（MCP Server）、`webui`（Streamlit 控制台）、`all`。
+可选 extras：`stockdata`（TickHub 本地直连）、`backtest`（回测数值栈）、`mcp`（MCP Server）、`webui`（Starlette + uvicorn 控制台，见 DEC-008）、`all`。
 
 ```bash
 cp .env.example .env    # 填入你选择的 LLM API Key

@@ -61,3 +61,12 @@ keep_citations = true
 max_llm_calls = 60
 max_total_tokens = 400000
 max_wall_clock_seconds = 1800
+
+[queue]
+# 批量队列：单任务失败后的重试与处置策略（见 budget.toml [per_queue]）。
+max_attempts = 3
+retry_delay_seconds = 5
+# skip 跳过失败任务继续；stop 立即暂停整队并告警。
+on_failure = "skip"
+# running/retrying 超过该时长视为进程中断，恢复时重新排队。
+stale_running_seconds = 21600
