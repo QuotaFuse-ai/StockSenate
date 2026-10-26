@@ -1,6 +1,6 @@
 """Regression matrix for the documented CLI exit codes.
 
-Spec (``docs/specs/cli-reference.md``): ``0`` success · ``2`` bad arguments ·
+Contract (``src/stock_senate/cli.py``): ``0`` success · ``2`` bad arguments ·
 ``3`` bad configuration · ``4`` data unavailable · ``7`` rate limited ·
 ``8`` partial failure. Each code has at least one black-box case.
 """

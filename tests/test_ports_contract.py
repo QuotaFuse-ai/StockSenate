@@ -1,4 +1,4 @@
-"""Port/topology contract (DEC-003).
+"""Port/topology contract.
 
 The product must not collide with neighbours on the deployment host:
 8787 TickHub Admin, 8000 TickHub MCP, 8790/8791 QuotaFuse Wire. StockSenate
@@ -43,15 +43,6 @@ def test_webui_defaults_to_loopback_8788() -> None:
 
 def test_own_ports_are_disjoint_from_neighbours() -> None:
     assert OWN_PORTS.isdisjoint(EXTERNAL_PORTS)
-
-
-def test_decision_record_lists_the_full_port_map() -> None:
-    text = (ROOT / "docs" / "decisions" / "DEC-003-service-topology-and-ports.md").read_text(
-        encoding="utf-8"
-    )
-
-    for port in OWN_PORTS | EXTERNAL_PORTS:
-        assert str(port) in text
 
 
 def test_compose_publishes_only_the_owned_ports_on_loopback() -> None:

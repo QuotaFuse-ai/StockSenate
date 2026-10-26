@@ -14,12 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Requirement originals and per-task working notes stay out of this repo
-      # (DEC-013). Ignore rules are not enough on their own: `git add -f` and a
-      # rebased branch both put files back, so the tree itself is the check.
-      - name: No requirement originals or task notes in the tree
+      # Requirement originals and the docs tree stay out of this repo. Ignore
+      # rules are not enough on their own: `git add -f` and a rebased branch
+      # both put files back, so the tree itself is the check.
+      - name: No requirement originals or docs in the tree
         run: |
-          leaks=$(git ls-files | grep -Ei '(^|/)councli|^docs/tasks/|\.(docx|pdf)$' || true)
+          leaks=$(git ls-files | grep -Ei '(^|/)councli|^docs/|\.(docx|pdf)$' || true)
           if [ -n "$leaks" ]; then
             echo "::error::These tracked files must not be published:"
             echo "$leaks"

@@ -1,7 +1,7 @@
 """Smoke tests for the public CLI surface.
 
 These assert the contract users see, not internals: command names, exit codes
-and the stdout/stderr split documented in docs/specs/cli-reference.md.
+and the stdout/stderr split.
 """
 
 from __future__ import annotations
