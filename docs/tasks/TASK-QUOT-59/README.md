@@ -84,7 +84,7 @@ POST http://127.0.0.1:8765/mcp（无 token）-> 401
 
 ## 19 链接核验
 
-- `docs/specs/references.md`：项目入口、上游与许可证、规范标准、运行时依赖官方文档、数据底座、本地规范文档，共 25 条链接。
+- `docs/specs/references.md`：项目入口、研究语境与许可证、规范标准、运行时依赖官方文档、数据底座、本地规范文档，共 25 条链接。
 - `scripts/check_links.py`：纯标准库，HEAD 优先、405/403 回退 GET，跟随重定向，末尾标点自动剥离，聚合报告 broken 链接并以退出码表达结果；`--offline` 或 `STOCKSENATE_SKIP_LINK_CHECK=1` 可在无网环境跳过。
 - 核验中发现并修正的失效/不可用链接：`keepachangelog.com/1.1.0/`（404）、`www.starlette.io` 与 `www.uvicorn.org`（本网络 TLS 失败）、`docs.anthropic.com`（证书过期且区域受限，改指官方 SDK 仓库）。最终 25/25 可访问。
 

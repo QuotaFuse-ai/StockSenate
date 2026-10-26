@@ -1,6 +1,6 @@
 """The real multi-role research pipeline.
 
-``SenateGraph.propagate(code, date)`` keeps the upstream contract: it returns
+``SenateGraph.propagate(code, date)`` keeps a stable contract: it returns
 ``(final_state, decision)``. Report files are a derived artifact of the same
 run; nothing in the decision depends on them existing.
 

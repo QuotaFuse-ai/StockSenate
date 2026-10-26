@@ -1,4 +1,4 @@
-# CLI / Python API / MCP 参考
+# CLI / Python API / MCP 手册
 
 本文档是 `ssenate` 的对外契约。**改动命令名、参数名或退出码属于破坏性变更**，必须同步更新本文件与 `requirements-traceability.md`。
 
@@ -163,7 +163,7 @@ final_state, decision = graph.propagate("600519", "2026-10-24")
 契约：
 
 - `propagate(code, date)` 位置参数与返回 `(final_state, decision)` 不变。
-- `hitl=` 与 `overrides=` 是仅关键字扩展参数，不影响上游调用方式。
+- `hitl=` 与 `overrides=` 是仅关键字扩展参数，不影响既有调用方式。
 - `decision` 至少包含 `rating`（Buy/Hold/Sell）、`reason`、A 股约束标记；不含任何可执行价位。
 - 报告文件是衍生输出，**不是**返回值。
 

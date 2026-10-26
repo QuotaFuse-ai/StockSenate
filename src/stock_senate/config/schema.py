@@ -2,7 +2,7 @@
 
 Two contracts matter more than the rest and are enforced here:
 
-* ``role_llms`` accepts exactly the sixteen keys the upstream project supports.
+* ``role_llms`` accepts exactly the sixteen supported role keys.
   A typo must fail loudly instead of silently falling back to the default
   model, because a silent fallback looks like a working run with the wrong
   model.
@@ -503,7 +503,7 @@ def _check_roles(
             {
                 "file": "agent_roles.toml",
                 "key": "roles",
-                "message": f"缺少上游内置角色：{sorted(missing_builtin)}（禁用可以，删除需确认）",
+                "message": f"缺少内置角色：{sorted(missing_builtin)}（禁用可以，删除需确认）",
             }
         )
 

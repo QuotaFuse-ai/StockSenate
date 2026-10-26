@@ -3,7 +3,7 @@
 # 因此本包不直接依赖 httpx，也不提供 [google] extra（见 DEC-007）。
 
 [llm]
-# 与上游一致的七个基础键，全部保留。
+# 七个基础键，全部保留。
 llm_provider = "minimax"
 deep_think_llm = "MiniMax-M2"
 quick_think_llm = "MiniMax-M2"
@@ -36,7 +36,7 @@ quality_gate = { provider = "minimax", model = "MiniMax-M2" }
 portfolio_manager = { provider = "minimax", model = "MiniMax-M2" }
 
 [llm.allowed_keys]
-# 与上游 role_llms 完全对齐；别名（technical/basic/sentiment/unlock）在
+# role_llms 的规范键集合；别名（technical/basic/sentiment/unlock）在
 # 加载时归一化到上面的规范键，重复声明报错。
 keys = [
   "market", "social", "news", "fundamentals", "policy", "hot_money", "lockup",

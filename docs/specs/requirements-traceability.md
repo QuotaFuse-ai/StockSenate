@@ -55,17 +55,17 @@
 | 3 | 图执行层与数据层分离，DataAccessLayer 为唯一取数入口 | `src/stock_senate/data/` | Python API | 代码扫描：节点不直接 import provider | P0 | 已实现（节点只经 `DataAccessLayer` 取数） |
 | 3 | 本地 JSON / 文本 / SQL 可插拔 | `data/providers/*` | `data_source.toml` | 四种 provider 各有单测 | P1 | 已实现（provider 齐全；各 provider 独立契约测试待补） |
 
-## 四、原版能力 100% 复现清单（§4）
+## 四、基础能力清单（§4）
 
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
-| 4 | 原版 CLI 子命令与参数语义 | `cli.py` | `ssenate` | 命令清单与 `cli-reference.md` 一致 | P0 | 已实现（`test_cli`） |
-| 4 | 原版报告五分区 + `summary.json` + `complete_report.md` | `report/render.py` | analyze / report | 文件存在且字段齐全 | P0 | 已实现（`test_webui_parity`） |
-| 4 | 原版 Streamlit 交互与实时进度 | `webui/` | WebUI | 进度面板随节点更新 | P1 | 已实现（Starlette 替代，见 DEC-008） |
-| 4 | 原版 LangGraph checkpoint 可恢复 | `workflow/checkpoint.py` | 配置 | 中断后续跑不重复调用已完成节点 | P1 | 待实现（未接入 checkpoint 恢复） |
-| 4 | 原版 `data_vendors` 配置语义 | `config/data_source.toml` | 配置 | 旧 `data_vendors` 键映射并告警 | P1 | 待实现（未实现旧键映射） |
+| 4 | CLI 子命令与参数语义 | `cli.py` | `ssenate` | 命令清单与 `cli-reference.md` 一致 | P0 | 已实现（`test_cli`） |
+| 4 | 报告五分区 + `summary.json` + `complete_report.md` | `report/render.py` | analyze / report | 文件存在且字段齐全 | P0 | 已实现（`test_webui_parity`） |
+| 4 | WebUI 交互与实时进度 | `webui/` | WebUI | 进度面板随节点更新 | P1 | 已实现（Starlette 实现，见 DEC-008） |
+| 4 | LangGraph checkpoint 可恢复 | `workflow/checkpoint.py` | 配置 | 中断后续跑不重复调用已完成节点 | P1 | 待实现（未接入 checkpoint 恢复） |
+| 4 | `data_vendors` 配置语义 | `config/data_source.toml` | 配置 | 旧 `data_vendors` 键映射并告警 | P1 | 待实现（未实现旧键映射） |
 
-## 五、原版 Issue 100% 解决（§5）
+## 五、Issue 闭环清单（§5）
 
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
@@ -226,11 +226,11 @@
 | 18.4 | 边界约束：不实盘、不产出价位、不泄露密钥 | 全仓库 | — | 安全工程师复核清单 | P0 | 已实现（`execution=false`、无价位字段、日志脱敏） |
 | 18.5 | 里程碑 M0–M4 与退出标准 | `PRD.md` §8 | — | 每个里程碑有验收脚本 | P0 | 已实现（M0–M3 有自动化验收；M4 未开始） |
 
-## 十九、参考链接汇总（§19）
+## 十九、外部链接汇总（§19）
 
 | 章节 | 要求 | 实现位置 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|
-| 19 | 逐项核验官网/规范链接可访问、许可证一致 | `docs/specs/references.md` | 链接检查脚本 | 链接检查脚本可运行、失效链接被报告 | P2 | 已实现（`docs/specs/references.md` 收录 25 条项目/规范/依赖链接；`scripts/check_links.py` 联网核验 25/25 可访问，`--offline` 或 `STOCKSENATE_SKIP_LINK_CHECK=1` 可跳过；许可证与上游一致，均为 Apache-2.0） |
+| 19 | 逐项核验官网/规范链接可访问、许可证一致 | `docs/specs/references.md` | 链接检查脚本 | 链接检查脚本可运行、失效链接被报告 | P2 | 已实现（`docs/specs/references.md` 收录 25 条项目/规范/依赖链接；`scripts/check_links.py` 联网核验 25/25 可访问，`--offline` 或 `STOCKSENATE_SKIP_LINK_CHECK=1` 可跳过；本项目采用 Apache-2.0，第三方归属与许可证声明见 `NOTICE`） |
 
 ## 二十、上线前核验项（v1.2 §20）
 
