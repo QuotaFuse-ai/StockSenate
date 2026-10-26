@@ -22,7 +22,7 @@
 |---|---|---|---|---|---|---|
 | 1.1 | 定位：只做投研分析 + 回测推演，不做实盘、不输出自动交易指令 | `README.md`、`docs/specs/PRD.md` §2.2、`config/output_template.toml` | 文档 / 报告页脚 | 报告与 README 均含免责声明；代码中无下单接口 | P0 | 已实现（`execution=false`、报告/MCP 免责声明；无下单代码） |
 | 1.1 | 7 角色 + 多空辩论 + 研究经理 + 交易员 + 三档风险 + 投资经理终审完整保留 | `src/stock_senate/workflow/`、`config/agent_roles.toml` | `ssenate analyze` | 拓扑单测断言 6 个阶段与顺序 | P0 | 已实现（`test_webui_parity`、`test_mcp` 跑通全链路） |
-| 1.1 | CLI / Streamlit WebUI / Python API / 报告 / checkpoint 完整保留 | `src/stock_senate/cli.py`、`webui/`、`graph/senate_graph.py` | 全部入口 | 三处入口对同一 run 结果一致 | P0 | 骨架（CLI/API/报告已实现；WebUI 以 Starlette 交付，checkpoint 恢复未实现，已排期 QUOT-60） |
+| 1.1 | CLI / Streamlit WebUI / Python API / 报告 / checkpoint 完整保留 | `src/stock_senate/cli.py`、`webui/`、`graph/senate_graph.py` | 全部入口 | 三处入口对同一 run 结果一致 | P0 | 已实现（CLI/API/WebUI 共用 `propagate`；SQLite checkpoint 中断续跑已接入，默认关闭，见 `test_checkpoint`） |
 | 1.1 | 数据采集统一交给 TickHub，不重复实现采集、缓存、代理池、降级 | `src/stock_senate/data/`、`config/data_source.toml` | `ssenate analyze` | 代码中无直连东财/巨潮/通达信；网络层只经 provider | P0 | 已实现（provider 层统一取数，无直连采集代码） |
 | 1.2 | 命名映射：包 `stocksenate`、模块 `stock_senate`、CLI `ssenate`、入口 `stock_senate.cli:main` | `pyproject.toml` | `ssenate` | `pip install -e .` 后 `ssenate --help` | P0 | 已实现 |
 | 1.2 | 旧 CLI `tradingagents` 保留并打印弃用警告 | `pyproject.toml` `[project.scripts]`、`cli.legacy_main` | `tradingagents` | 运行后 stderr 含弃用提示 | P0 | 已实现 |
@@ -62,7 +62,7 @@
 | 4 | CLI 子命令与参数语义 | `cli.py` | `ssenate` | 命令清单与 `cli-reference.md` 一致 | P0 | 已实现（`test_cli`） |
 | 4 | 报告五分区 + `summary.json` + `complete_report.md` | `report/render.py` | analyze / report | 文件存在且字段齐全 | P0 | 已实现（`test_webui_parity`） |
 | 4 | WebUI 交互与实时进度 | `webui/` | WebUI | 进度面板随节点更新 | P1 | 已实现（Starlette 实现，见 DEC-008） |
-| 4 | LangGraph checkpoint 可恢复 | `workflow/checkpoint.py` | 配置 | 中断后续跑不重复调用已完成节点 | P1 | 待实现（未接入 checkpoint 恢复） |
+| 4 | LangGraph checkpoint 可恢复 | `workflow/checkpoint.py` | 配置 | 中断后续跑不重复调用已完成节点 | P1 | 已实现（`workflow/checkpoint.py` SQLite 按 code/date/config_hash 保存阶段产物；`test_checkpoint` 覆盖中断→续跑→不重复调用→终局一致；默认关闭） |
 | 4 | `data_vendors` 配置语义 | `config/data_source.toml` | 配置 | 旧 `data_vendors` 键映射并告警 | P1 | 待实现（未实现旧键映射） |
 
 ## 五、Issue 闭环清单（§5）
@@ -77,7 +77,7 @@
 | 5.6 | 弱模型 tool-calling 空报告 → Schema 强约束 | `workflow/nodes/base.py`、`roles/schemas.py` | analyze | 空输出被标 `partial` 且重试，不静默消失 | P0 | 已实现（`roles/schemas.py` 强约束 + partial） |
 | 5.7 | 30~50 次调用 → 增量分析 | `workflow/incremental.py` | 配置 / analyze | 二次分析 token 显著下降 | P1 | 待实现（无增量分析模块） |
 | 5.8 | 配置分散 → 统一 toml + Schema 校验 | `config/*.toml`、`config/schema.py` | `ssenate config validate` | 错误定位到文件与键 | P0 | 已实现 |
-| 5.9 | 日志弱 → 结构化日志（stdout/stderr 分离、脱敏、多 sink） | `observability/logging.py` | 全部入口 | stdout 无日志；API key 被脱敏 | P0 | 部分实现（`observability/logging.py`：stdout 纯净、字段脱敏、stderr 结构化；多 sink 仅 stderr，file/sqlite/mysql/postgres 未实现——file 已排期 QUOT-60，其余保留待实现） |
+| 5.9 | 日志弱 → 结构化日志（stdout/stderr 分离、脱敏、多 sink） | `observability/logging.py` | 全部入口 | stdout 无日志；API key 被脱敏 | P0 | 部分实现（`observability/logging.py`：stdout 纯净、字段脱敏、stderr 结构化；已支持轮转 file sink（`[logging]`，默认关闭，见 `test_logging_sink`），sqlite/mysql/postgres sink 仍待实现） |
 | 5.10 | 无 CI → 补全 CI | `.github/workflows/ci.yml` | CI | lint + type + test + audit 全绿 | P0 | 已实现（根因：GitHub Actions 下 Typer 强制 Rich 终端渲染，`OptionHighlighter` 把 `--start` 拆成 `-` + `-start` 两段 ANSI，断言看不到连续原文；测试子进程加 `_TYPER_FORCE_DISABLE_TERMINAL=1`，未用 skipif、未改断言。合并 main 后另修两处基线问题：`from tests.cli_support` 在裸 `pytest` 下不可导入（`pyproject.toml` 声明 `pythonpath=["."]`）、MCP stdio 用例 EOF 竞态（先读两条响应再关 stdin）；本地 225 passed 连跑 5 次，PR CI run `40291436449` 十个 job 全绿） |
 | 5.11 | 无 lock file → 依赖锁定 | `uv.lock` | 安装 | CI 用 `uv sync --frozen` | P1 | 已实现（uv 0.13.5 解析 107 包；CI 新增 lockfile job：`uv sync --frozen --extra dev` + `uv run --frozen pytest`；合并 main 后干净 venv 从 lock 安装 225 通过，lockfile job 在 run `40291436449` 为 success） |
 | 5.12 | 英文文档不一致 → 修复 | `README.md`、`docs/` | 文档 | 中英文命令与配置键一致 | P2 | 已实现 |
@@ -128,7 +128,7 @@
 | 9 | 配置统一 toml + JSON Schema 校验 + 迁移脚本 | `config/*.toml`、`config/schema.py`、`cli.config_migrate` | CLI | `config validate` / `config migrate` | P0 | 已实现 |
 | 9 | WebUI 可编辑角色/工作流/模板，写操作审计 | `webui/pages/settings.py` | WebUI | 每次写入产生审计记录 | P2 | 部分实现（仅角色启停 `POST /settings/roles` 可写并留痕；工作流/模板为只读。可编辑与全量写审计保留为待实现） |
 | 9.1 | 短期记忆用图状态；长期反思入 PGVector；同标的检索注入 | `workflow/memory.py`、`observability/reflection.py` | analyze | 可关闭；不跨标的污染 | P1 | 待实现（无 memory 模块） |
-| 9.2 | 防 Prompt 注入清洗层 + 合规过滤 | `data/sanitize.py`、`workflow/guardrails.py` | 全部输入 | 注入样本不改变系统行为 | P0 | 已实现（`data/sanitize.py`；注入样本测试待补） |
+| 9.2 | 防 Prompt 注入清洗层 + 合规过滤 | `data/sanitize.py`、`workflow/guardrails.py` | 全部输入 | 注入样本不改变系统行为 | P0 | 已实现（`data/sanitize.py`；`tests/test_external_sanitization.py` 4 类注入样本 × 参数化断言：清洗发生在摘要与提示词之前、清洗留痕、良性文本不动、所有 provider 统一包裹） |
 | 9.3 | HITL 两个强制挂起点，支持同意/驳回/修改/超时 | `workflow/hitl.py` | analyze / WebUI | 四种动作各一测；自动放行留痕 | P0 | 已实现（`workflow/hitl.py`） |
 | 9.4 | LLM-as-a-Judge 三维评分，<70 标 `low_quality` | `workflow/judge.py` | analyze / 报告 | 低分报告被标记且 WebUI 高亮 | P1 | 部分实现（`workflow/nodes/quality.py` 规则式三维质量门，<70 标 `low_quality`，数据覆盖按事实数计分、0 事实域不计覆盖；LLM-as-a-Judge 未实现，保留为待实现） |
 | 9.5 | Map-Reduce 上下文压缩 | `workflow/compress.py` | analyze | 超阈值触发；引用不丢 | P1 | 待实现（无 compress 模块） |
@@ -221,7 +221,7 @@
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
 | 18.1 | 测试类型：单元/契约/集成/E2E/回归/安全 | `tests/`、`.github/workflows/ci.yml` | CI | 六类目录与用例存在 | P0 | 已实现（单元/契约/集成/安全边界；浏览器 E2E 未跑） |
-| 18.2 | 18 项新增能力逐项验收 | 本文件 F-01…F-31 | — | 逐项打勾 | P0 | 进行中（已排期 QUOT-61） |
+| 18.2 | 18 项新增能力逐项验收 | 本文件 F-01…F-31 | — | 逐项打勾 | P0 | 已验收（QUOT-61：F-14…F-31 共 18 项 → 12 通过 / 3 部分通过 / 3 未通过；逐项证据见 `docs/tasks/TASK-QUOT-61/acceptance-report.md`。未通过 F-18 压缩、F-19 Agent Memory、F-29 增量分析仅存配置无运行时代码，去向见报告 §5 遗留清单） |
 | 18.3 | 部署：pip / Docker / compose | `Dockerfile`、`docker-compose.yml` | 部署 | compose 两个服务可起 | P2 | 已实现（WSL2 Ubuntu 24.04 + Docker 29.1.3 / Compose 2.40.3 真实 `docker compose up -d`：webui 与 mcp 均 healthy，8788/8765 `/healthz` 返回 200；实测修掉两处阻塞：`# syntax` 指令拉取前端镜像卡死已移除、容器绑定 0.0.0.0 时两个进程要求 `STOCKSENATE_WEBUI_PASSWORD` / `STOCKSENATE_MCP_TOKEN` 已在 compose 与 `.env.example` 标明必填；未设口令时 webui 303 跳登录页、mcp 无 token 401） |
 | 18.4 | 边界约束：不实盘、不产出价位、不泄露密钥 | 全仓库 | — | 安全工程师复核清单 | P0 | 已实现（`execution=false`、无价位字段、日志脱敏） |
 | 18.5 | 里程碑 M0–M4 与退出标准 | `PRD.md` §8 | — | 每个里程碑有验收脚本 | P0 | 已实现（M0–M3 有自动化验收；M4 未开始） |
