@@ -8,8 +8,9 @@ twice. A duplicated code keeps the union of its strategies and the best score.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from stock_senate.data.codes import normalize_code
 

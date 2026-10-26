@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from stock_senate.config.loader import home_dir
 from stock_senate.report.render import render_markdown, render_summary
@@ -102,8 +103,10 @@ def list_runs(
         summary["run_id"] = summary.get("run_id") or directory.name
         summary["path"] = str(directory)
         rows.append(summary)
-    rows.sort(key=lambda item: (str(item.get("date") or ""), str(item.get("generated_at") or "")),
-              reverse=newest_first)
+    rows.sort(
+        key=lambda item: (str(item.get("date") or ""), str(item.get("generated_at") or "")),
+        reverse=newest_first,
+    )
     return rows[:limit] if limit else rows
 
 
@@ -120,9 +123,7 @@ def load(run_id: str, *, home: Path | str | None = None) -> dict[str, Any]:
 def _pick_run(code: str, day: str, *, home: Path | str | None) -> dict[str, Any]:
     """Newest snapshot of ``code`` dated exactly ``day``."""
     candidates = [
-        row
-        for row in list_runs(code=code, home=home)
-        if str(row.get("date")) == str(day)
+        row for row in list_runs(code=code, home=home) if str(row.get("date")) == str(day)
     ]
     if not candidates:
         raise ReportNotFound(f"没有找到 {code} 在 {day} 的报告快照")

@@ -10,7 +10,7 @@ than silently skipped.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,15 +32,16 @@ class TextDocProvider(Provider):
             # Fail closed: this provider must never be trusted to yield numbers.
             raise ValueError("text_doc.numeric_extraction 必须为 false（文本资料只做定性阅读）")
 
-    def fetch(self, domain: str, code: str, as_of: str,
-              params: dict[str, Any] | None = None) -> Any:
+    def fetch(
+        self, domain: str, code: str, as_of: str, params: dict[str, Any] | None = None
+    ) -> Any:
         from stock_senate.data.envelope import DataEnvelope
 
         root = self._root() / domain / code
         if not root.is_dir():
             raise ProviderNotAvailable(f"{domain}/{code}: no document directory")
 
-        documents: list[dict[str, str]] = []
+        documents: list[dict[str, Any]] = []
         skipped: list[str] = []
         latest: str = ""
         for path in sorted(root.iterdir()):
@@ -100,7 +101,7 @@ def _document_date(path: Path, text: str) -> str:
     if match:
         return f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
     try:
-        stamp = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        stamp = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
         return stamp.date().isoformat()
     except OSError:
         return "1970-01-01"

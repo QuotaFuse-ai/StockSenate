@@ -2,27 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from stock_senate.data.providers.base import (
+    TOOL_TO_DOMAIN,
     Provider,
     ProviderError,
     ProviderNotAvailable,
-    TOOL_TO_DOMAIN,
     envelope_from_payload,
     tool_to_domain,
 )
 from stock_senate.data.providers.composite import CompositeProvider
 from stock_senate.data.providers.local_json import LocalJsonProvider
-from stock_senate.data.providers.newsieve import NewsieveProvider
 from stock_senate.data.providers.sql import SqlProvider
 from stock_senate.data.providers.text_doc import TextDocProvider
 from stock_senate.data.providers.tickhub import TickHubProvider
 
 # ``kind`` in data_source.toml -> provider class. Names are resolved first so
-# tickhub_cn/tickhub_us/newsieve win over the generic MCP kind.
-_BY_KIND = {
+# tickhub_cn/tickhub_us win over the generic MCP kind.
+_BY_KIND: dict[str, Callable[..., Provider]] = {
     "json_file": LocalJsonProvider,
     "text_doc": TextDocProvider,
     "sql": SqlProvider,
@@ -31,24 +31,26 @@ _BY_KIND = {
 }
 
 
-def build_provider(name: str, spec: dict[str, Any] | None = None, *,
-                   home: Path | None = None) -> Provider:
+def build_provider(
+    name: str, spec: dict[str, Any] | None = None, *, home: Path | None = None
+) -> Provider:
     spec = dict(spec or {})
     lowered = name.lower()
-    if lowered.startswith("newsieve"):
-        cls: type[Provider] = NewsieveProvider
-    elif lowered.startswith("tickhub"):
+    cls: Callable[..., Provider]
+    if lowered.startswith("tickhub"):
         cls = TickHubProvider
     else:
         kind = str(spec.get("kind") or "mcp")
-        cls = _BY_KIND.get(kind)
-        if cls is None:
+        candidate = _BY_KIND.get(kind)
+        if candidate is None:
             raise ValueError(f"未知 provider 类型 {kind!r}（{name}）")
+        cls = candidate
     return cls(name, spec, home=home)
 
 
-def build_providers(section: dict[str, Any] | None, *,
-                    home: Path | None = None) -> dict[str, Provider]:
+def build_providers(
+    section: dict[str, Any] | None, *, home: Path | None = None
+) -> dict[str, Provider]:
     built: dict[str, Provider] = {}
     for name, spec in (section or {}).items():
         if not isinstance(spec, dict) or spec.get("enabled") is False:

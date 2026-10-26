@@ -39,7 +39,15 @@ async def detail(request: Request) -> Response:
     job = runtime(request).job(job_id)
     if job is None:
         return HTMLResponse(
-            str(page(request, "进度", Html("<p>任务不存在或已过期。</p>"), active="/", error="任务不存在")),
+            str(
+                page(
+                    request,
+                    "进度",
+                    Html("<p>任务不存在或已过期。</p>"),
+                    active="/",
+                    error="任务不存在",
+                )
+            ),
             status_code=404,
         )
     snapshot = job.snapshot()
@@ -67,18 +75,21 @@ async def detail(request: Request) -> Response:
 <tbody id="events"></tbody></table>
 <script>
 const JOB = {job_literal};
-function cell(value) {{ const td = document.createElement('td'); td.textContent = value; return td; }}
+function cell(value) {{
+  const td = document.createElement('td'); td.textContent = value; return td;
+}}
 function tick() {{
-  fetch('/api/progress/' + encodeURIComponent(JOB), {{credentials: 'same-origin'}})
+  fetch('/api/progress/' + encodeURIComponent(JOB),
+    {{credentials: 'same-origin'}})
     .then(function (response) {{ return response.ok ? response.json() : null; }})
     .then(function (data) {{
       if (!data) return;
       document.getElementById('bar').style.width = data.percent + '%';
       document.getElementById('status').textContent = data.status;
       document.getElementById('stage').textContent = data.stage;
+      const rated = data.rating ? ' · 结论 ' + data.rating : '';
       document.getElementById('summary').textContent =
-        '进度 ' + data.percent + '% · 事件 ' + data.events.length + ' 条' +
-        (data.rating ? ' · 结论 ' + data.rating : '');
+        '进度 ' + data.percent + '% · 事件 ' + data.events.length + ' 条' + rated;
       const error = document.getElementById('error');
       if (data.error) {{ error.textContent = data.error; error.style.display = 'block'; }}
       const body = document.getElementById('events');

@@ -12,7 +12,8 @@ a reworded sentence does not masquerade as a changed conclusion.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 _RATING_ORDER = ("sell", "underweight", "hold", "overweight", "buy")
 
@@ -84,14 +85,36 @@ def diff_states(
 ) -> dict[str, Any]:
     """Compare two ``state.json`` bodies."""
     fields = [
-        _field("decision.rating", _get(before, "decision", "rating"), _get(after, "decision", "rating")),
-        _field("decision.horizon", _get(before, "decision", "horizon"), _get(after, "decision", "horizon")),
-        _field("decision.confidence", _get(before, "decision", "confidence"), _get(after, "decision", "confidence")),
-        _field("decision.low_quality", _get(before, "decision", "low_quality"), _get(after, "decision", "low_quality")),
+        _field(
+            "decision.rating", _get(before, "decision", "rating"), _get(after, "decision", "rating")
+        ),
+        _field(
+            "decision.horizon",
+            _get(before, "decision", "horizon"),
+            _get(after, "decision", "horizon"),
+        ),
+        _field(
+            "decision.confidence",
+            _get(before, "decision", "confidence"),
+            _get(after, "decision", "confidence"),
+        ),
+        _field(
+            "decision.low_quality",
+            _get(before, "decision", "low_quality"),
+            _get(after, "decision", "low_quality"),
+        ),
         _field("quality.score", _get(before, "quality", "score"), _get(after, "quality", "score")),
-        _field("research.stance", _get(before, "research", "stance"), _get(after, "research", "stance")),
-        _field("trade.direction", _get(before, "trade", "direction"), _get(after, "trade", "direction")),
-        _field("data.status", _get(before, "data", "summary", "status"), _get(after, "data", "summary", "status")),
+        _field(
+            "research.stance", _get(before, "research", "stance"), _get(after, "research", "stance")
+        ),
+        _field(
+            "trade.direction", _get(before, "trade", "direction"), _get(after, "trade", "direction")
+        ),
+        _field(
+            "data.status",
+            _get(before, "data", "summary", "status"),
+            _get(after, "data", "summary", "status"),
+        ),
     ]
 
     stances_before = _analyst_stances(before)
@@ -103,8 +126,16 @@ def diff_states(
                 {"role": role, "from": stances_before.get(role), "to": stances_after.get(role)}
             )
 
-    risks = _set_delta("decision.risks", _get(before, "decision", "risks") or [], _get(after, "decision", "risks") or [])
-    reasons = _set_delta("decision.reasons", _get(before, "decision", "reasons") or [], _get(after, "decision", "reasons") or [])
+    risks = _set_delta(
+        "decision.risks",
+        _get(before, "decision", "risks") or [],
+        _get(after, "decision", "risks") or [],
+    )
+    reasons = _set_delta(
+        "decision.reasons",
+        _get(before, "decision", "reasons") or [],
+        _get(after, "decision", "reasons") or [],
+    )
 
     changed = [item["field"] for item in fields if item["changed"]]
     if risks["changed"]:

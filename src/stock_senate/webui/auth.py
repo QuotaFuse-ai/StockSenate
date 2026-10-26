@@ -16,7 +16,7 @@ import json
 import secrets
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -26,7 +26,6 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from stock_senate.config.loader import env
 from stock_senate.observability.logging import audit
 from stock_senate.webui.templates import csrf_input, esc, page
 
@@ -53,14 +52,19 @@ class WebAuth:
     def check_password(self, value: str | None) -> bool:
         if not self.login_required:
             return True
-        if not value:
+        expected = self.password
+        if not value or not expected:
             return False
-        return hmac.compare_digest(value.encode("utf-8"), self.password.encode("utf-8"))
+        return hmac.compare_digest(value.encode("utf-8"), expected.encode("utf-8"))
 
     def throttled(self, client: str) -> bool:
         now = time.time()
         with self._lock:
-            recent = [stamp for stamp in self._failures.get(client, []) if now - stamp < _LOGIN_WINDOW_SECONDS]
+            recent = [
+                stamp
+                for stamp in self._failures.get(client, [])
+                if now - stamp < _LOGIN_WINDOW_SECONDS
+            ]
             self._failures[client] = recent
             return len(recent) >= _LOGIN_MAX_FAILURES
 
@@ -176,7 +180,7 @@ def audit_write(home: Path | str, action: str, **fields: Any) -> dict[str, Any]:
     from stock_senate.observability.logging import redact
 
     payload = {
-        "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+        "ts": datetime.now(UTC).isoformat(timespec="milliseconds"),
         "event": "webui.write",
         "actor": "webui",
         "action": action,
@@ -222,7 +226,9 @@ def _safe_next(value: str | None) -> str:
     return "/"
 
 
-def _login_page(request: Request, *, error: str | None = None, next_path: str = "/") -> HTMLResponse:
+def _login_page(
+    request: Request, *, error: str | None = None, next_path: str = "/"
+) -> HTMLResponse:
     body = f"""
 <div class="panel" style="max-width:420px;margin:0 auto">
   <form method="post" action="/login">

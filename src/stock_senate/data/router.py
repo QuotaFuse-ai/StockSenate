@@ -7,7 +7,7 @@ reason, never an exception and never a model-invented number.
 
 Modes (``data_source.toml`` ``[global].mode``):
 
-* ``stockdata`` — only remote底座 providers (TickHub / Newsieve);
+* ``stockdata`` — only remote底座 providers (TickHub);
 * ``local``     — only local archives; no socket is opened;
 * ``hybrid``    — per-domain routing with local providers attempted first;
 * ``priority``  — exactly the order declared in ``[routing]``.
@@ -66,7 +66,8 @@ class DataAccessLayer:
             for domain, names in (section.get("routing") or {}).items()
         }
         self.providers: dict[str, Provider] = dict(
-            providers if providers is not None
+            providers
+            if providers is not None
             else build_providers(section.get("providers"), home=home)
         )
         self.attempts: dict[str, list[dict[str, Any]]] = {}
@@ -75,15 +76,22 @@ class DataAccessLayer:
     # public API
     # ------------------------------------------------------------------ #
 
-    def fetch(self, domain: str, code: str, *, as_of: str | None = None,
-              params: dict[str, Any] | None = None) -> DataEnvelope:
+    def fetch(
+        self,
+        domain: str,
+        code: str,
+        *,
+        as_of: str | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> DataEnvelope:
         as_of = _as_day(as_of or self.as_of)
         attempts: list[dict[str, Any]] = []
         self.attempts[domain] = attempts
         candidates = self.candidates(domain)
         if not candidates:
             return DataEnvelope.missing(
-                domain, code,
+                domain,
+                code,
                 as_of=as_of,
                 detail=f"no provider for domain {domain!r} in mode {self.mode!r}",
             )
@@ -98,32 +106,54 @@ class DataAccessLayer:
 
             reason = self._reject(envelope, as_of)
             if reason:
-                attempts.append({"provider": name, "error": "rejected", "reason": reason,
-                                 "status": envelope.data_source_status.value})
+                attempts.append(
+                    {
+                        "provider": name,
+                        "error": "rejected",
+                        "reason": reason,
+                        "status": envelope.data_source_status.value,
+                    }
+                )
                 continue
 
-            attempts.append({"provider": name, "error": None, "reason": "ok",
-                             "status": envelope.data_source_status.value})
+            attempts.append(
+                {
+                    "provider": name,
+                    "error": None,
+                    "reason": "ok",
+                    "status": envelope.data_source_status.value,
+                }
+            )
             return self._with_trace(envelope, candidates[:index])
 
-        detail = "; ".join(
-            f"{item['provider']}: {item['reason']}" for item in attempts
-        ) or "no candidate responded"
+        detail = (
+            "; ".join(f"{item['provider']}: {item['reason']}" for item in attempts)
+            or "no candidate responded"
+        )
         return DataEnvelope.missing(
-            domain, code, as_of=as_of,
+            domain,
+            code,
+            as_of=as_of,
             detail=f"all sources failed in mode {self.mode}: {detail}"[:2000],
         )
 
-    def fetch_many(self, domains: Iterable[str], code: str, *, as_of: str | None = None,
-                   params: dict[str, dict[str, Any]] | None = None) -> dict[str, DataEnvelope]:
+    def fetch_many(
+        self,
+        domains: Iterable[str],
+        code: str,
+        *,
+        as_of: str | None = None,
+        params: dict[str, dict[str, Any]] | None = None,
+    ) -> dict[str, DataEnvelope]:
         params = params or {}
         return {
             domain: self.fetch(domain, code, as_of=as_of, params=params.get(domain))
             for domain in domains
         }
 
-    def bundle(self, code: str, *, as_of: str | None = None,
-               domains: Iterable[str] | None = None) -> dict[str, DataEnvelope]:
+    def bundle(
+        self, code: str, *, as_of: str | None = None, domains: Iterable[str] | None = None
+    ) -> dict[str, DataEnvelope]:
         chosen = list(domains) if domains is not None else self.domain_names()
         return self.fetch_many(chosen, code, as_of=as_of)
 
@@ -134,14 +164,12 @@ class DataAccessLayer:
 
     def candidates(self, domain: str) -> list[str]:
         names = [
-            name for name in self.routing.get(domain, [])
+            name
+            for name in self.routing.get(domain, [])
             if name in self.providers and self.providers[name].supports(domain)
         ]
         if not names:
-            names = [
-                name for name, provider in self.providers.items()
-                if provider.supports(domain)
-            ]
+            names = [name for name, provider in self.providers.items() if provider.supports(domain)]
         if self.mode == "local":
             names = [name for name in names if not is_remote(self.providers[name])]
         elif self.mode == "stockdata":
@@ -185,7 +213,9 @@ class DataAccessLayer:
         return {
             "mode": self.mode,
             "allow_fallback": self.allow_fallback,
-            "providers": {name: sorted(provider.domains) for name, provider in self.providers.items()},
+            "providers": {
+                name: sorted(provider.domains) for name, provider in self.providers.items()
+            },
             "attempts": self.attempts,
         }
 
@@ -193,10 +223,16 @@ class DataAccessLayer:
 def summarize(envelopes: Mapping[str, DataEnvelope]) -> dict[str, Any]:
     """One status for a whole bundle, for reports and exit codes."""
     statuses = [envelope.data_source_status for envelope in envelopes.values()]
-    missing = [domain for domain, item in envelopes.items()
-               if item.data_source_status is SourceStatus.MISSING]
-    degraded = [domain for domain, item in envelopes.items()
-                if item.data_source_status is SourceStatus.DEGRADED]
+    missing = [
+        domain
+        for domain, item in envelopes.items()
+        if item.data_source_status is SourceStatus.MISSING
+    ]
+    degraded = [
+        domain
+        for domain, item in envelopes.items()
+        if item.data_source_status is SourceStatus.DEGRADED
+    ]
     if not statuses or len(missing) == len(statuses):
         overall = SourceStatus.MISSING.value
     elif missing or degraded:

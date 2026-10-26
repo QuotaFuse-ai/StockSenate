@@ -11,7 +11,7 @@ from starlette.routing import Route
 
 from stock_senate.report import store
 from stock_senate.webui.pages.common import checked_form, runtime
-from stock_senate.webui.templates import Html, csrf_input, esc, page, table, tag
+from stock_senate.webui.templates import Html, esc, page, table, tag
 
 _RATINGS = ("buy", "hold", "sell")
 
@@ -56,7 +56,8 @@ def _rows(request: Request, rows: list[dict], favorites: set[str], next_path: st
             f'<button class="small ghost" type="submit">{"取消收藏" if marked else "收藏"}</button>'
             "</form>"
         )
-        data = row.get("data") if isinstance(row.get("data"), dict) else {}
+        raw_data = row.get("data")
+        data = raw_data if isinstance(raw_data, dict) else {}
         body.append(
             [
                 Html("★" if marked else "☆"),
@@ -109,10 +110,16 @@ async def view(request: Request) -> Response:
     body = Html(
         str(_filters(request, code=code, day=day, rating=rating, only_favorites=only_favorites))
         + f'<p class="muted">共 {len(rows)} 份报告，收藏 {len(favorites)} 份。</p>'
-        + str(_rows(request, rows, favorites, _next_path(request, code, day, rating, only_favorites)))
+        + str(
+            _rows(request, rows, favorites, _next_path(request, code, day, rating, only_favorites))
+        )
     )
     return HTMLResponse(
-        str(page(request, "历史", body, active="/history", notice=request.query_params.get("notice")))
+        str(
+            page(
+                request, "历史", body, active="/history", notice=request.query_params.get("notice")
+            )
+        )
     )
 
 
@@ -124,7 +131,15 @@ async def favorite(request: Request) -> Response:
     run_id = str(form.get("run_id") or "").strip()
     if not run_id:
         return HTMLResponse(
-            str(page(request, "历史", Html("<p>缺少运行 ID。</p>"), active="/history", error="缺少运行 ID")),
+            str(
+                page(
+                    request,
+                    "历史",
+                    Html("<p>缺少运行 ID。</p>"),
+                    active="/history",
+                    error="缺少运行 ID",
+                )
+            ),
             status_code=400,
         )
     marked = await run_in_threadpool(service.toggle_favorite, run_id)

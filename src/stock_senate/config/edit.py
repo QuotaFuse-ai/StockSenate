@@ -27,6 +27,15 @@ class ConfigEditError(ValueError):
     """The requested edit is invalid or would break a configuration invariant."""
 
 
+def canonical_name(name: str) -> str:
+    """Normalise a built-in role alias to its canonical key.
+
+    Shared entry point for every role command, so ``role show technical`` and
+    ``role enable technical`` resolve the same table.
+    """
+    return ROLE_ALIASES.get(str(name).strip(), str(name).strip())
+
+
 def _parse(text: str) -> Any:
     try:
         import tomlkit
@@ -81,7 +90,7 @@ def set_enabled(
     if not path.is_file():
         raise ConfigEditError(f"找不到 {path}；先执行 `ssenate config init`")
 
-    key = ROLE_ALIASES.get(str(name).strip(), str(name).strip())
+    key = canonical_name(name)
     text = path.read_text(encoding="utf-8")
     document = _parse(text)
     roles = document.get("roles") if hasattr(document, "get") else None
@@ -94,8 +103,13 @@ def set_enabled(
         raise ConfigEditError(f"roles.{key} 必须是表")
     previous = bool(entry.get("enabled", True))
     if previous is bool(enabled):
-        return {"role": key, "enabled": previous, "previous": previous,
-                "file": str(path), "changed": False}
+        return {
+            "role": key,
+            "enabled": previous,
+            "previous": previous,
+            "file": str(path),
+            "changed": False,
+        }
 
     entry["enabled"] = bool(enabled)
     roles[key] = entry
@@ -113,4 +127,4 @@ def set_enabled(
     return payload
 
 
-__all__ = ["ConfigEditError", "ROLE_FILE", "set_enabled"]
+__all__ = ["ConfigEditError", "ROLE_FILE", "canonical_name", "set_enabled"]

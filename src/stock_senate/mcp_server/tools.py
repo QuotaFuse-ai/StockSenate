@@ -11,9 +11,10 @@ passes its payload through :func:`stock_senate.observability.logging.redact`.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from datetime import date as date_cls
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from stock_senate.config.loader import ensure_home, load_config
 from stock_senate.observability.logging import redact

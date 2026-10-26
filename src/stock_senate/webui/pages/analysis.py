@@ -33,7 +33,8 @@ _FORM = """
     <div><label for="weight">权重（如 bull=0.6, bear=0.4）</label>
       <input id="weight" type="text" name="weight" placeholder="bull=0.6"></div>
   </div>
-  <p class="muted" style="margin-bottom:0">输出只含研究结论与风险提示，不含可执行价位或交易指令。</p>
+  <p class="muted" style="margin-bottom:0">输出只含研究结论与风险提示，
+     不含可执行价位或交易指令。</p>
 </form>
 </div>"""
 
@@ -54,7 +55,9 @@ def _jobs_table(request: Request) -> Html:
             else Html("—")
         )
         rows.append([link, esc(job.code), esc(job.date), status, esc(job.stage), report])
-    return table(["任务", "标的", "日期", "状态", "阶段", "报告"], rows, empty="本次进程内还没有分析任务")
+    return table(
+        ["任务", "标的", "日期", "状态", "阶段", "报告"], rows, empty="本次进程内还没有分析任务"
+    )
 
 
 async def index(request: Request) -> Response:

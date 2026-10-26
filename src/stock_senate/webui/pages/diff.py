@@ -43,17 +43,25 @@ def _render_diff(payload: dict) -> Html:
         risk_rows.append([tag("移除", "bad"), esc(item.get("field")), esc(item.get("value"))])
     for item in risks.get("changed") or []:
         risk_rows.append(
-            [tag("变化", ""), esc(item.get("field")), f"{esc(item.get('from'))} → {esc(item.get('to'))}"]
+            [
+                tag("变化", ""),
+                esc(item.get("field")),
+                f"{esc(item.get('from'))} → {esc(item.get('to'))}",
+            ]
         )
     conclusion = payload.get("conclusion") or {}
+    conclusion_tag = tag(
+        "是" if conclusion.get("changed") else "否",
+        "warn" if conclusion.get("changed") else "ok",
+    )
     head = (
-        f'<p>对比 <code>{esc(payload.get("code"))}</code>：'
-        f'{esc((payload.get("from") or {}).get("date"))}'
-        f'（{esc((payload.get("from") or {}).get("rating"))}） → '
-        f'{esc((payload.get("to") or {}).get("date"))}'
-        f'（{esc((payload.get("to") or {}).get("rating"))}）</p>'
-        f'<p>变化字段 {esc(payload.get("changed_count"))} 个；结论是否变化：'
-        f'{tag("是" if conclusion.get("changed") else "否", "warn" if conclusion.get("changed") else "ok")}</p>'
+        f"<p>对比 <code>{esc(payload.get('code'))}</code>："
+        f"{esc((payload.get('from') or {}).get('date'))}"
+        f"（{esc((payload.get('from') or {}).get('rating'))}） → "
+        f"{esc((payload.get('to') or {}).get('date'))}"
+        f"（{esc((payload.get('to') or {}).get('rating'))}）</p>"
+        f"<p>变化字段 {esc(payload.get('changed_count'))} 个；结论是否变化："
+        f"{conclusion_tag}</p>"
     )
     return Html(
         head
@@ -90,7 +98,11 @@ async def view(request: Request) -> Response:
             str(page(request, "报告 Diff", form, active="/diff", error=str(exc))),
             status_code=400,
         )
-    return HTMLResponse(str(page(request, "报告 Diff", Html(str(form) + str(_render_diff(payload))), active="/diff")))
+    return HTMLResponse(
+        str(
+            page(request, "报告 Diff", Html(str(form) + str(_render_diff(payload))), active="/diff")
+        )
+    )
 
 
 async def api(request: Request) -> Response:

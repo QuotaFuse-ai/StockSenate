@@ -33,8 +33,9 @@ _QUERY = (
 class SqlProvider(Provider):
     kind = "sql"
 
-    def fetch(self, domain: str, code: str, as_of: str,
-              params: dict[str, Any] | None = None) -> Any:
+    def fetch(
+        self, domain: str, code: str, as_of: str, params: dict[str, Any] | None = None
+    ) -> Any:
         driver = str(self.config.get("driver") or "sqlite").lower()
         dsn = self._dsn()
         if not dsn:
@@ -84,9 +85,9 @@ class SqlProvider(Provider):
 
 def _sqlite_path(dsn: str) -> Path:
     if dsn.startswith("sqlite:///"):
-        dsn = dsn[len("sqlite:///"):]
+        dsn = dsn[len("sqlite:///") :]
     elif dsn.startswith("sqlite://"):
-        dsn = dsn[len("sqlite://"):]
+        dsn = dsn[len("sqlite://") :]
     return Path(dsn).expanduser()
 
 

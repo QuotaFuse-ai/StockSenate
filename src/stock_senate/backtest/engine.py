@@ -21,10 +21,11 @@ from __future__ import annotations
 
 import math
 import os
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict
 from datetime import date as date_cls
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from stock_senate.config.loader import ensure_home, load_config
 from stock_senate.data.envelope import date_only, now_iso
@@ -188,9 +189,7 @@ def _load_bars(
     else:
         overall = "ok"
 
-    short_history = any(
-        row["first_bar"] is None or row["first_bar"] > start for row in rows
-    )
+    short_history = any(row["first_bar"] is None or row["first_bar"] > start for row in rows)
     info = {
         "status": overall,
         "as_of": as_of,
@@ -536,22 +535,31 @@ def _code_summary(
         "alpha_pct": _round(total_return - benchmark) if benchmark is not None else None,
         "trades": len(trades),
         "win_rate": _round(len(wins) / len(trades) * 100) if trades else None,
-        "avg_trade_return_pct": _round(
-            sum(trade.return_pct for trade in trades) / len(trades)
-        ) if trades else None,
+        "avg_trade_return_pct": _round(sum(trade.return_pct for trade in trades) / len(trades))
+        if trades
+        else None,
         "profit_factor": _round(profits / losses) if losses else (None if not profits else None),
         "max_drawdown_pct": _round(_max_drawdown(curve)),
         "direction_accuracy": _round((len(correct) + len(bearish)) / directional * 100)
-        if directional else None,
-        "buy_forward_return_pct": _round(sum(buy_returns) / len(buy_returns)) if buy_returns else None,
-        "sell_forward_return_pct": _round(sum(sell_returns) / len(sell_returns)) if sell_returns else None,
+        if directional
+        else None,
+        "buy_forward_return_pct": _round(sum(buy_returns) / len(buy_returns))
+        if buy_returns
+        else None,
+        "sell_forward_return_pct": _round(sum(sell_returns) / len(sell_returns))
+        if sell_returns
+        else None,
         "signal_decay_pct": _round(
             (sum(buy_returns) / len(buy_returns) if buy_returns else 0.0)
             - (sum(sell_returns) / len(sell_returns) if sell_returns else 0.0)
-        ) if buy_returns or sell_returns else None,
+        )
+        if buy_returns or sell_returns
+        else None,
         "avg_hold_days": _round(
             sum(_hold_days(trade, window_bars) for trade in trades) / len(trades)
-        ) if trades else None,
+        )
+        if trades
+        else None,
         "exposure_pct": _round(holding_days / simulated_days * 100) if simulated_days else 0.0,
         "limit_up_skips": limit_up_skips,
         "limit_down_defers": limit_down_defers,
@@ -595,19 +603,21 @@ def _metrics(
         "final_equity": round(final_equity, 4),
         "total_return_pct": round(total_return, 4),
         "benchmark_return_pct": _round(sum(benchmarks) / len(benchmarks)) if benchmarks else None,
-        "alpha_pct": _round(total_return - sum(benchmarks) / len(benchmarks)) if benchmarks else None,
+        "alpha_pct": _round(total_return - sum(benchmarks) / len(benchmarks))
+        if benchmarks
+        else None,
         "max_drawdown_pct": _round(_max_drawdown(curve)),
         "sharpe": _round(_sharpe(curve)),
         "trade_count": len(trades),
         "win_rate": _round(len(wins) / len(trades) * 100) if trades else None,
-        "avg_trade_return_pct": _round(
-            sum(trade["return_pct"] for trade in trades) / len(trades)
-        ) if trades else None,
+        "avg_trade_return_pct": _round(sum(trade["return_pct"] for trade in trades) / len(trades))
+        if trades
+        else None,
         "profit_factor": _round(profits / losses) if losses else None,
         "direction_accuracy": _round(sum(accuracies) / len(accuracies)) if accuracies else None,
-        "expectancy_pct": _round(
-            sum(trade["return_pct"] for trade in trades) / len(trades)
-        ) if trades else None,
+        "expectancy_pct": _round(sum(trade["return_pct"] for trade in trades) / len(trades))
+        if trades
+        else None,
         "non_overlapping_windows": True,
         "no_lookahead": True,
         "t_plus_one": True,
@@ -651,8 +661,7 @@ def _hold_days(trade: Trade, bars: list[Bar]) -> int:
 
 def _aggregate_curve(sims: Mapping[str, Mapping[str, Any]]) -> list[tuple[str, float]]:
     series = {
-        code: {day: value for day, value in sim.get("curve") or []}
-        for code, sim in sims.items()
+        code: {day: value for day, value in sim.get("curve") or []} for code, sim in sims.items()
     }
     days = sorted({day for row in series.values() for day in row})
     latest: dict[str, float] = {}

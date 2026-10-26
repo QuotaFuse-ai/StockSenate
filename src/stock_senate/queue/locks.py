@@ -20,8 +20,8 @@ import os
 import re
 import time
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from stock_senate.config.loader import ensure_home
 

@@ -7,8 +7,9 @@ channel cannot silence the others.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any
 
 from . import console, webhook, webui
 
@@ -39,9 +40,7 @@ def dispatch(
         try:
             results.append(sender(event, config, home=home))
         except Exception as exc:  # noqa: BLE001 - a channel may not kill the loop
-            results.append(
-                {"channel": name, "ok": False, "reason": type(exc).__name__}
-            )
+            results.append({"channel": name, "ok": False, "reason": type(exc).__name__})
     return results
 
 

@@ -9,9 +9,10 @@ a data envelope; a missing fact means "unknown", never a guessed value.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from stock_senate.data.envelope import DataEnvelope
 from stock_senate.data.router import summarize
@@ -23,15 +24,34 @@ _OR = re.compile(r"\s+or\s+", re.IGNORECASE)
 _NUMBER = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 
 _HIGH_RISK = (
-    "立案", "处罚", "退市", "违约", "冻结", "诉讼", "商誉减值", "预亏",
-    "重大亏损", "资金占用", "违规担保", "评级下调", "被出具警示函",
+    "立案",
+    "处罚",
+    "退市",
+    "违约",
+    "冻结",
+    "诉讼",
+    "商誉减值",
+    "预亏",
+    "重大亏损",
+    "资金占用",
+    "违规担保",
+    "评级下调",
+    "被出具警示函",
 )
 _MID_RISK = ("风险提示", "问询", "监管", "下调", "亏损", "减持", "质押", "异常波动")
 
 _SEVERITY_KEYS = ("severity", "risk_level", "risk_severity", "level")
 _DATE_KEYS = ("date", "unlock_date", "expiry_date", "解禁日期")
 _TITLE_KEYS = (
-    "title", "headline", "summary", "subject", "content", "text", "name", "label", "type",
+    "title",
+    "headline",
+    "summary",
+    "subject",
+    "content",
+    "text",
+    "name",
+    "label",
+    "type",
 )
 _RISK_LIST_KEYS = ("events", "items", "list", "records", "rows")
 _LOCKUP_LIST_KEYS = ("upcoming", "items", "list", "records", "rows")
@@ -76,13 +96,9 @@ def parse_condition(text: Any) -> ConditionGroup:
         chunk = part.strip()
         match = _CONDITION.match(chunk)
         if not match:
-            raise ValueError(
-                f"无法解析告警条件 {chunk!r}；格式应为 field.path op value [or ...]"
-            )
+            raise ValueError(f"无法解析告警条件 {chunk!r}；格式应为 field.path op value [or ...]")
         path, op, literal = match.group(1), match.group(2), match.group(3)
-        clauses.append(
-            Condition(path=path, op=op, threshold=_literal(literal), raw=chunk)
-        )
+        clauses.append(Condition(path=path, op=op, threshold=_literal(literal), raw=chunk))
     return ConditionGroup(tuple(clauses), raw)
 
 
@@ -135,9 +151,7 @@ def compare(value: Any, op: str, threshold: Any) -> bool | None:
     }[op]
 
 
-def evaluate(
-    condition: ConditionGroup, facts: Mapping[str, Any]
-) -> tuple[bool | None, Any]:
+def evaluate(condition: ConditionGroup, facts: Mapping[str, Any]) -> tuple[bool | None, Any]:
     """Return ``(fired, observed)``; ``fired`` is ``None`` when data is absent.
 
     Clauses combine as a three-valued ``or``: any decided ``True`` wins, an
@@ -147,7 +161,7 @@ def evaluate(
     values = [facts.get(clause.path) for clause in condition.clauses]
     decisions = [
         compare(value, clause.op, clause.threshold)
-        for value, clause in zip(values, condition.clauses)
+        for value, clause in zip(values, condition.clauses, strict=False)
     ]
     if any(decision is True for decision in decisions):
         fired: bool | None = True
@@ -185,9 +199,7 @@ def build_facts(envelopes: Mapping[str, DataEnvelope]) -> dict[str, Any]:
     overall = summarize(envelopes)
     facts["data_envelope.data_source_status"] = overall["status"]
     for name, envelope in envelopes.items():
-        facts[f"data_envelope.{name}.data_source_status"] = (
-            envelope.data_source_status.value
-        )
+        facts[f"data_envelope.{name}.data_source_status"] = envelope.data_source_status.value
 
     quote = envelopes.get("quote")
     if quote is not None and quote.usable:
@@ -204,19 +216,17 @@ def build_facts(envelopes: Mapping[str, DataEnvelope]) -> dict[str, Any]:
     kline = envelopes.get("kline")
     if kline is not None and kline.usable:
         rows = [
-            row for row in rows_of(kline.payload)
+            row
+            for row in rows_of(kline.payload)
             if _first_number(row, ("close", "收盘", "price", "last")) is not None
         ]
         rows = sorted(rows, key=lambda row: _first_text(row, ("date", "trade_date", "day")))
         if rows:
             facts["kline.bars"] = len(rows)
-            facts["kline.close"] = _first_number(
-                rows[-1], ("close", "收盘", "price", "last")
-            )
+            facts["kline.close"] = _first_number(rows[-1], ("close", "收盘", "price", "last"))
             volumes = [
-                value for value in (
-                    _first_number(row, ("volume", "vol", "成交量")) for row in rows
-                )
+                value
+                for value in (_first_number(row, ("volume", "vol", "成交量")) for row in rows)
                 if value is not None
             ]
             if len(volumes) >= 6:
@@ -230,29 +240,29 @@ def build_facts(envelopes: Mapping[str, DataEnvelope]) -> dict[str, Any]:
 
     risk = envelopes.get("risk_event")
     if risk is not None and risk.usable:
-        rows, payload = _payload_rows(risk.payload, _RISK_LIST_KEYS)
-        if rows is None:
-            rows = [payload] if payload else []
-        severity, count = _risk_severity(rows)
+        risk_rows, risk_payload = _payload_rows(risk.payload, _RISK_LIST_KEYS)
+        if risk_rows is None:
+            risk_rows = [risk_payload] if risk_payload else []
+        severity, count = _risk_severity(risk_rows)
         facts["risk_event.count"] = count
         if severity:
             facts["risk_event.severity"] = severity
-        elif not rows:
+        elif not risk_rows:
             # The provider scanned the announcements and found no risk event;
             # that is a decided "none", not missing data.
             facts["risk_event.severity"] = "none"
 
     lockup = envelopes.get("lockup_calendar")
     if lockup is not None and lockup.usable:
-        rows, payload = _payload_rows(lockup.payload, _LOCKUP_LIST_KEYS)
-        window = _first_number(payload, ("forward_days", "horizon_days"))
-        if rows is None:
-            rows = [payload] if payload else []
-        days, count = _days_to_unlock(rows, _as_day(lockup))
+        lockup_rows, lockup_payload = _payload_rows(lockup.payload, _LOCKUP_LIST_KEYS)
+        window = _first_number(lockup_payload, ("forward_days", "horizon_days"))
+        if lockup_rows is None:
+            lockup_rows = [lockup_payload] if lockup_payload else []
+        days, count = _days_to_unlock(lockup_rows, _as_day(lockup))
         facts["lockup_calendar.count"] = count
         if days is not None:
             facts["lockup_calendar.days_to_expiry"] = days
-        elif not rows and window is not None:
+        elif not lockup_rows and window is not None:
             # ``upcoming`` is empty over a declared forward window: the nearest
             # unlock is beyond it. Report the window bound, never a made-up date.
             facts["lockup_calendar.days_to_expiry"] = float(window + 1)
@@ -305,7 +315,13 @@ def _risk_severity(rows: list[Mapping[str, Any]]) -> tuple[str | None, int]:
         count += 1
         if explicit in {"high", "mid", "medium", "low", "高", "中", "低"}:
             mapped = {
-                "high": 3, "mid": 2, "medium": 2, "low": 1, "高": 3, "中": 2, "低": 1,
+                "high": 3,
+                "mid": 2,
+                "medium": 2,
+                "low": 1,
+                "高": 3,
+                "中": 2,
+                "低": 1,
             }[explicit]
         elif any(word in title for word in _HIGH_RISK):
             mapped = 3

@@ -21,8 +21,9 @@ classifiers = [
   "Topic :: Office/Business :: Financial :: Investment",
 ]
 # httpx is intentionally NOT a direct dependency: mootdx pins httpx<0.26 while
-# google-genai needs >=0.28.1. Data access goes through TickHub/Newsieve, so the
-# core never imports httpx; optional integrations declare their own range.
+# google-genai needs >=0.28.1. Data access goes through TickHub, so the core
+# never imports httpx; optional integrations declare their own range. The two
+# LLM SDKs below pull httpx transitively on their own terms (DEC-007).
 dependencies = [
   "typer>=0.12",
   "rich>=13.7",
@@ -30,17 +31,26 @@ dependencies = [
   "pydantic-settings>=2.2",
   "python-dotenv>=1.0",
   "toml>=0.10",
+  # minimax (the default llm_provider) speaks the OpenAI wire protocol;
+  # claude speaks Anthropic's. Imported lazily in roles/llm.py, declared here so
+  # a plain `pip install .` can run `ssenate analyze` without a traceback.
+  "openai>=1.40",
+  "anthropic>=0.34",
 ]
 
 [project.optional-dependencies]
 stockdata = ["tickhub-cn>=1.0"]
-backtest = ["pandas>=2.0", "numpy>=1.26"]
-mcp = ["mcp>=1.9"]
+# Backtest is pure Python today (no pandas/numpy imports in src/), so it has no
+# extra of its own.
+mcp = ["mcp>=2.0"]
 webui = ["starlette>=0.37", "uvicorn>=0.30"]
 all = [
-  "stocksenate[stockdata,backtest,mcp,webui]",
+  "stocksenate[stockdata,mcp,webui]",
 ]
+# CI installs only `.[dev]`; the test suite imports the MCP server and the
+# WebUI, so the dev scope must carry those extras as well.
 dev = [
+  "stocksenate[webui,mcp]",
   "pytest>=8.0",
   "pytest-asyncio>=0.23",
   "ruff>=0.6",
@@ -78,6 +88,10 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Typer/Click declare options as `typer.Option(...)` default arguments by design.
+extend-immutable-calls = ["typer.Option", "typer.Argument"]
 
 [tool.mypy]
 python_version = "3.11"

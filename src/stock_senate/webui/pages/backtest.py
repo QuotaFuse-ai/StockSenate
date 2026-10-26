@@ -7,7 +7,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, Response
 from starlette.routing import Route
 
-from stock_senate.webui.pages.common import checked_form, redirect, runtime, split_csv
+from stock_senate.webui.pages.common import checked_form, runtime, split_csv
 from stock_senate.webui.state import today
 from stock_senate.webui.templates import Html, csrf_input, esc, page, table, tag
 
@@ -17,7 +17,8 @@ _FORM = """
   {csrf}
   <div class="row">
     <div><label for="codes">标的（逗号分隔）</label>
-      <input id="codes" type="text" name="codes" value="{codes}" placeholder="600519,000001" required></div>
+      <input id="codes" type="text" name="codes" value="{codes}"
+             placeholder="600519,000001" required></div>
     <div><label for="start">开始</label>
       <input id="start" type="date" name="start" value="{start}" required></div>
     <div><label for="end">结束</label>
@@ -30,7 +31,8 @@ _FORM = """
       <input id="fee" type="text" name="fee" value="{fee}" placeholder="0.0003"></div>
     <div><button type="submit">运行回测</button></div>
   </div>
-  <p class="muted" style="margin-bottom:0">回测是历史推演，不是 future 收益承诺；数据缺失只会降级并标 partial。</p>
+  <p class="muted" style="margin-bottom:0">回测是历史推演，不是 future 收益承诺；
+     数据缺失只会降级并标 partial。</p>
 </form>
 </div>"""
 
@@ -54,13 +56,16 @@ def _result(payload: dict) -> Html:
             ]
         )
     head = (
-        f'<p>{esc(payload.get("start"))} → {esc(payload.get("end"))} · '
-        f'{esc(len(payload.get("codes") or []))} 个标的 · 持有 {esc(payload.get("window"))} 个交易日</p>'
-        f'<p>数据状态 {tag((payload.get("data") or {}).get("status", "—"), "bad")} '
-        f'{"· partial" if payload.get("partial") else ""}</p>'
+        f"<p>{esc(payload.get('start'))} → {esc(payload.get('end'))} · "
+        f"{esc(len(payload.get('codes') or []))} 个标的 · "
+        f"持有 {esc(payload.get('window'))} 个交易日</p>"
+        f"<p>数据状态 {tag((payload.get('data') or {}).get('status', '—'), 'bad')} "
+        f"{'· partial' if payload.get('partial') else ''}</p>"
     )
     missing = (payload.get("data") or {}).get("missing_codes") or []
-    missing_html = f'<p class="notice warn">行情缺失：{esc(", ".join(missing))}</p>' if missing else ""
+    missing_html = (
+        f'<p class="notice warn">行情缺失：{esc(", ".join(missing))}</p>' if missing else ""
+    )
     artifacts = payload.get("artifacts") or {}
     return Html(
         head
@@ -71,7 +76,8 @@ def _result(payload: dict) -> Html:
         + str(table(["代码", "收益", "胜率", "交易数", "最大回撤"], per_code, empty="没有结果"))
         + "<h2>产物</h2>"
         + str(table(["项", "路径"], [[esc(key), esc(value)] for key, value in artifacts.items()]))
-        + '<p class="muted">回测结果保存在状态目录的 <code>backtests/</code> 下，可用 sqlite 复查。</p>'
+        + '<p class="muted">回测结果保存在状态目录的 <code>backtests/</code> 下，'
+        + "可用 sqlite 复查。</p>"
     )
 
 

@@ -11,7 +11,8 @@ conclusion but loses the evidence it cannot support.
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from stock_senate.roles.schemas import AnalystReport, Citation, Fact
 
@@ -145,9 +146,7 @@ def apply_conflicts(
         fact for fact in report.facts if (fact.label, fact.value) not in bad_values
     ]
     bad_domains = {
-        str(item.get("domain"))
-        for item in conflicts
-        if item.get("kind") == "citation_mismatch"
+        str(item.get("domain")) for item in conflicts if item.get("kind") == "citation_mismatch"
     }
     citations: list[Citation] = [
         citation for citation in report.citations if citation.domain not in bad_domains

@@ -12,7 +12,7 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 TABLES = (
     "decision_record",
@@ -149,7 +149,14 @@ class BacktestStore:
         connection.executemany(
             "INSERT INTO decision_record VALUES (?, ?, ?, ?, ?, ?)",
             [
-                (key, row["code"], row["date"], int(row["signal"]), row["source"], row.get("rating"))
+                (
+                    key,
+                    row["code"],
+                    row["date"],
+                    int(row["signal"]),
+                    row["source"],
+                    row.get("rating"),
+                )
                 for row in run.get("decisions", [])
             ],
         )
@@ -157,9 +164,17 @@ class BacktestStore:
             "INSERT INTO trade VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
-                    key, row["code"], row["entry_date"], row["entry_price"], row["exit_date"],
-                    row["exit_price"], int(row["shares"]), row["fees"], row["pnl"],
-                    row["return_pct"], row["reason"],
+                    key,
+                    row["code"],
+                    row["entry_date"],
+                    row["entry_price"],
+                    row["exit_date"],
+                    row["exit_price"],
+                    int(row["shares"]),
+                    row["fees"],
+                    row["pnl"],
+                    row["return_pct"],
+                    row["reason"],
                 )
                 for row in run.get("trades", [])
             ],
@@ -174,8 +189,16 @@ class BacktestStore:
         connection.executemany(
             "INSERT INTO price_series VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                (key, row["code"], row["date"], row["open"], row["high"], row["low"],
-                 row["close"], row["volume"])
+                (
+                    key,
+                    row["code"],
+                    row["date"],
+                    row["open"],
+                    row["high"],
+                    row["low"],
+                    row["close"],
+                    row["volume"],
+                )
                 for row in run.get("prices", [])
             ],
         )
@@ -198,9 +221,7 @@ class BacktestStore:
     def table_counts(self) -> dict[str, int]:
         counts = {}
         for table in TABLES:
-            counts[table] = self._connection.execute(
-                f"SELECT COUNT(*) FROM {table}"
-            ).fetchone()[0]
+            counts[table] = self._connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
         return counts
 
     def close(self) -> None:

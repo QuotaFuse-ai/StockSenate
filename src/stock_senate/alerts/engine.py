@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import hashlib
 import time
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from stock_senate.config.loader import ensure_home, load_config
 from stock_senate.data.envelope import date_only
@@ -86,8 +87,7 @@ def dry_run(
             "unknown": 0,
             "data": {},
             "note": (
-                "没有可监控的标的：先运行 ssenate analyze，或设置 "
-                f"{_ENV_CODES}=600519,000001。"
+                f"没有可监控的标的：先运行 ssenate analyze，或设置 {_ENV_CODES}=600519,000001。"
             ),
             "disclaimer": DISCLAIMER,
         }
@@ -228,9 +228,7 @@ def serve(
 # --------------------------------------------------------------------------- #
 
 
-def _select_rules(
-    section: Mapping[str, Any], rule_id: str | None
-) -> list[dict[str, Any]] | None:
+def _select_rules(section: Mapping[str, Any], rule_id: str | None) -> list[dict[str, Any]] | None:
     rules = [dict(rule) for rule in section.get("rules") or []]
     if not rule_id:
         return rules
@@ -327,8 +325,7 @@ def _observed_block(condition: Mapping[str, Any], observed: Any) -> dict[str, An
         values = observed if isinstance(observed, list) else [observed] * len(clauses)
         return {
             "any": [
-                {**clause, "value": value}
-                for clause, value in zip(clauses, values)
+                {**clause, "value": value} for clause, value in zip(clauses, values, strict=False)
             ]
         }
     return {**condition, "value": observed}
@@ -363,7 +360,7 @@ def _collect(
     if not domains:
         domains = ["quote"]
     for code in targets:
-        layer = DataAccessLayer(cfg, home=home, as_of=as_of)
+        layer = DataAccessLayer(cfg, home=Path(home) if home is not None else None, as_of=as_of)
         envelopes = layer.fetch_many(domains, code, as_of=as_of)
         facts[code] = rulebook.build_facts(envelopes)
         data[code] = {

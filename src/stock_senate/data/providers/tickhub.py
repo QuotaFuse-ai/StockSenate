@@ -35,9 +35,16 @@ DOMAIN_TOOLS: dict[str, tuple[str, ...]] = {
     "dragon_tiger": ("dragon_tiger",),
     "lockup_calendar": ("lockup_expiry",),
     "risk_event": ("cninfo_announcement_risk",),
+    "news": ("eastmoney_stock_news",),
+    "social_buzz": ("eastmoney_stock_news",),
+    "policy_feed": ("cls_telegraph", "cctv_news"),
 }
 
 _CONFIDENCE = {"A": "high", "B": "medium", "C": "low"}
+
+# Domains whose upstream data changes only when a filing lands. They use
+# ``announcement_lookback_days`` (default 180) rather than the 60-day quote window.
+_SEMI_STATIC_DOMAINS = {"announcement", "risk_event"}
 
 _DATE_KEYS = (
     "date",
@@ -55,8 +62,9 @@ _DATE_KEYS = (
 class TickHubProvider(Provider):
     kind = "mcp"
 
-    def fetch(self, domain: str, code: str, as_of: str,
-              params: dict[str, Any] | None = None) -> Any:
+    def fetch(
+        self, domain: str, code: str, as_of: str, params: dict[str, Any] | None = None
+    ) -> Any:
         client = self._client()
         tools = DOMAIN_TOOLS.get(domain)
         if not tools:
@@ -94,14 +102,30 @@ class TickHubProvider(Provider):
             self._client_instance = factory()
         return self._client_instance
 
-    def _params(self, tool: str, domain: str, code: str, as_of: str,
-                extra: dict[str, Any]) -> dict[str, Any]:
+    def _params(
+        self, tool: str, domain: str, code: str, as_of: str, extra: dict[str, Any]
+    ) -> dict[str, Any]:
         lookback = int(extra.get("lookback_days") or self.config.get("lookback_days") or 60)
+        if domain in _SEMI_STATIC_DOMAINS:
+            # Filings cluster around report deadlines; a 60-day window can miss
+            # every announcement for a quiet quarter, so the digest would score
+            # an "ok" domain with zero facts. Semi-static domains get a wider
+            # window from the same provider config.
+            lookback = int(
+                extra.get("lookback_days") or self.config.get("announcement_lookback_days") or 180
+            )
         start = _shift(as_of, -lookback)
         base: dict[str, Any] = {"code": code}
         if tool == "tencent_kline":
-            base.update({"period": "daily", "adjust": "qfq", "start": start, "end": as_of,
-                         "limit": int(extra.get("limit") or 320)})
+            base.update(
+                {
+                    "period": "daily",
+                    "adjust": "qfq",
+                    "start": start,
+                    "end": as_of,
+                    "limit": int(extra.get("limit") or 320),
+                }
+            )
         elif tool == "tencent_quote":
             base = {"codes": code}
         elif tool == "eastmoney_financial_all":
@@ -121,14 +145,19 @@ class TickHubProvider(Provider):
             base.update({"trade_date": as_of, "forward_days": int(extra.get("forward_days") or 90)})
         elif tool == "eastmoney_finance_indicators":
             base["code"] = code
+        elif tool == "eastmoney_stock_news":
+            base.update({"code": code, "limit": int(extra.get("limit") or 20)})
+        elif tool == "cls_telegraph":
+            base = {"limit": int(extra.get("limit") or 20)}
+        elif tool == "cctv_news":
+            base = {"date": as_of}
         return base
 
     # ------------------------------------------------------------------ #
     # envelope
     # ------------------------------------------------------------------ #
 
-    def _envelope(self, domain: str, code: str, as_of: str, tool: str,
-                  raw: Any) -> Any | None:
+    def _envelope(self, domain: str, code: str, as_of: str, tool: str, raw: Any) -> Any | None:
         if not isinstance(raw, dict):
             return None
         data = raw.get("data")
@@ -136,8 +165,9 @@ class TickHubProvider(Provider):
             return None
         meta = dict(raw.get("meta") or {})
         meta["data_source_status"] = _status(meta)
-        meta["confidence"] = _CONFIDENCE.get(str(meta.get("confidence") or "").upper(),
-                                             meta.get("confidence"))
+        meta["confidence"] = _CONFIDENCE.get(
+            str(meta.get("confidence") or "").upper(), meta.get("confidence")
+        )
         data_as_of = _data_as_of(domain, data, meta, as_of)
         detail = f"{tool} via {meta.get('source') or 'tickhub'}"
         if meta.get("cache_hit"):
@@ -175,7 +205,7 @@ def _data_as_of(domain: str, data: Any, meta: dict[str, Any], fallback: str) -> 
         return str(meta.get("fetched_at") or fallback)
     rows = data
     if isinstance(data, dict):
-        for key in ("items", "rows", "list", "quotes", "records"):
+        for key in ("items", "rows", "list", "quotes", "records", "news"):
             if isinstance(data.get(key), list):
                 rows = data[key]
                 break
@@ -201,4 +231,25 @@ def _shift(value: str, days: int) -> str:
         return value
 
 
-__all__ = ["DOMAIN_TOOLS", "TickHubProvider"]
+def sync(since: str | None = None) -> dict[str, Any]:
+    """Pull the market-wide 7x24 news feed and report a compact summary."""
+    since = since or (date.today() - timedelta(days=7)).isoformat()
+    provider = TickHubProvider("tickhub_cn", {"package": "tickhub-cn"})
+    raw = provider._client().call("eastmoney_global_news", {"limit": 200})
+    data = raw.get("data") if isinstance(raw, dict) else raw
+    rows = [row for row in data if isinstance(row, dict)] if isinstance(data, list) else []
+    if rows and any(key in rows[0] for key in _DATE_KEYS):
+        rows = [
+            row
+            for row in rows
+            if max((date_only(row.get(key) or "") for key in _DATE_KEYS), default="") >= since
+        ]
+    return {
+        "ok": True,
+        "since": since,
+        "count": len(rows),
+        "source": "tickhub_cn/eastmoney_global_news",
+    }
+
+
+__all__ = ["DOMAIN_TOOLS", "TickHubProvider", "sync"]

@@ -63,9 +63,7 @@ def _csrf(runtime: WebRuntime, client: TestClient) -> str:
     return str(session["csrf"])
 
 
-def test_every_page_renders_in_loopback_trust_mode(
-    config_dir: Path, app_home: Path
-) -> None:
+def test_every_page_renders_in_loopback_trust_mode(config_dir: Path, app_home: Path) -> None:
     runtime = WebRuntime(config_dir=config_dir)
     assert runtime.auth.login_required is False
     app = create_app(runtime)
@@ -77,9 +75,7 @@ def test_every_page_renders_in_loopback_trust_mode(
         assert client.get("/healthz").json()["service"] == "stock-senate-webui"
 
 
-def test_writes_require_csrf_and_reject_bad_input(
-    config_dir: Path, app_home: Path
-) -> None:
+def test_writes_require_csrf_and_reject_bad_input(config_dir: Path, app_home: Path) -> None:
     runtime = WebRuntime(config_dir=config_dir)
     app = create_app(runtime)
 
@@ -95,14 +91,17 @@ def test_writes_require_csrf_and_reject_bad_input(
         assert runtime.favorites() == []
 
         # Favoriting is a real, audited write.
-        response = client.post(
-            "/history/favorite", data={"run_id": "fake-run", "csrf": csrf}
-        )
+        response = client.post("/history/favorite", data={"run_id": "fake-run", "csrf": csrf})
         assert response.status_code == 303
         assert runtime.favorites() == ["fake-run"]
         writes = recent_writes(runtime.home)
         assert writes and writes[0]["action"] == "history.favorite"
-        assert json.loads(audit_log_path(runtime.home).read_text(encoding="utf-8").splitlines()[0])["run_id"] == "fake-run"
+        assert (
+            json.loads(audit_log_path(runtime.home).read_text(encoding="utf-8").splitlines()[0])[
+                "run_id"
+            ]
+            == "fake-run"
+        )
 
         # Toggling off removes it again.
         assert (
@@ -112,7 +111,9 @@ def test_writes_require_csrf_and_reject_bad_input(
         assert runtime.favorites() == []
 
         assert (
-            client.post("/settings/roles", data={"name": "nope", "enabled": "0", "csrf": csrf}).status_code
+            client.post(
+                "/settings/roles", data={"name": "nope", "enabled": "0", "csrf": csrf}
+            ).status_code
             == 400
         )
         assert client.post("/queue/submit", data={"csv": "", "csrf": csrf}).status_code == 400
@@ -140,10 +141,7 @@ def test_login_gate_and_token_separation(
 
         assert client.post("/login", data={"password": "wrong", "next": "/"}).status_code == 401
         # The MCP bearer token is not a WebUI password.
-        assert (
-            client.post("/login", data={"password": MCP_TOKEN, "next": "/"}).status_code
-            == 401
-        )
+        assert client.post("/login", data={"password": MCP_TOKEN, "next": "/"}).status_code == 401
 
         response = client.post("/login", data={"password": PASSWORD, "next": "/"})
         assert response.status_code == 303
@@ -160,9 +158,7 @@ def test_login_gate_and_token_separation(
         assert client.get("/").status_code == 303
 
 
-def test_role_toggle_is_persisted_to_config(
-    config_dir: Path, app_home: Path
-) -> None:
+def test_role_toggle_is_persisted_to_config(config_dir: Path, app_home: Path) -> None:
     runtime = WebRuntime(config_dir=config_dir)
     app = create_app(runtime)
 

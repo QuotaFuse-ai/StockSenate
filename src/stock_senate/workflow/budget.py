@@ -68,7 +68,9 @@ def budget_from_config(config: dict[str, Any]) -> Budget:
     return Budget(
         max_calls=int(workflow.get("max_llm_calls", per_run.get("max_llm_calls", 60))),
         max_tokens=int(max_tokens),
-        max_seconds=float(workflow.get("max_wall_clock_seconds", per_run.get("max_wall_clock_seconds", 1800))),
+        max_seconds=float(
+            workflow.get("max_wall_clock_seconds", per_run.get("max_wall_clock_seconds", 1800))
+        ),
     )
 
 

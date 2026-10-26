@@ -28,10 +28,11 @@ import re
 import threading
 import time
 import uuid
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any
 
 from stock_senate.alerts.channels import dispatch as dispatch_alert
 from stock_senate.alerts.engine import DISCLAIMER as ALERT_DISCLAIMER
@@ -502,7 +503,9 @@ class _Drain:
         while True:
             current = _job(self.root, job_id) or {}
             if current.get("cancel_requested"):
-                self._update(job_id, status="cancelled", finished_at=now_iso(), last_reason="cancelled")
+                self._update(
+                    job_id, status="cancelled", finished_at=now_iso(), last_reason="cancelled"
+                )
                 return
             if current.get("pause_requested"):
                 self._update(job_id, status="paused", finished_at=now_iso(), last_reason="paused")
@@ -536,7 +539,9 @@ class _Drain:
             )
         if isinstance(result, Mapping):
             return {}, result
-        raise TypeError(f"runner 必须返回 (state, decision) 或 decision，收到 {type(result).__name__}")
+        raise TypeError(
+            f"runner 必须返回 (state, decision) 或 decision，收到 {type(result).__name__}"
+        )
 
     def _retry(self, job_id: str, attempt: int, exc: BaseException, wait: float) -> bool:
         if attempt >= self.options.max_attempts:
@@ -596,11 +601,13 @@ class _Drain:
         state: Mapping[str, Any],
         decision: Mapping[str, Any],
     ) -> None:
-        budget = state.get("budget") if isinstance(state.get("budget"), Mapping) else {}
+        raw_budget = state.get("budget")
+        budget: Mapping[str, Any] = raw_budget if isinstance(raw_budget, Mapping) else {}
         calls = int(budget.get("calls") or 0)
         input_tokens = int(budget.get("input_tokens") or 0)
         output_tokens = int(budget.get("output_tokens") or 0)
-        data = decision.get("data") if isinstance(decision.get("data"), Mapping) else {}
+        raw_data = decision.get("data")
+        data: Mapping[str, Any] = raw_data if isinstance(raw_data, Mapping) else {}
         summary = {
             "run_id": decision.get("run_id"),
             "rating": decision.get("rating"),
@@ -695,7 +702,11 @@ class _Drain:
         if tokens >= self.options.max_total_tokens and tokens > 0:
             self._trip(
                 "queue_budget",
-                {"limit": "max_total_tokens", "tokens": tokens, "ceiling": self.options.max_total_tokens},
+                {
+                    "limit": "max_total_tokens",
+                    "tokens": tokens,
+                    "ceiling": self.options.max_total_tokens,
+                },
             )
             return
         if elapsed >= self.options.max_wall_clock_seconds:
@@ -800,8 +811,10 @@ def _load(root: Path) -> dict[str, Any]:
         raw = {}
     if not isinstance(raw, dict):
         raw = {}
-    queue = raw.get("queue") if isinstance(raw.get("queue"), dict) else {}
-    jobs = raw.get("jobs") if isinstance(raw.get("jobs"), list) else []
+    raw_queue = raw.get("queue")
+    raw_jobs = raw.get("jobs")
+    queue: dict[str, Any] = raw_queue if isinstance(raw_queue, dict) else {}
+    jobs: list[Any] = raw_jobs if isinstance(raw_jobs, list) else []
     queue.setdefault("next_order", len(jobs) + 1)
     queue.setdefault("session", {})
     queue.setdefault("paused", False)
@@ -939,7 +952,7 @@ def _alert_event(
         "as_of": date.today().isoformat(),
         "status": "triggered",
         "observed": {"reason": reason, **dict(detail), "usage": usage},
-        "message": f"[high] {title}：{dict(detail)}；" f"本次队列已调用 {usage.get('llm_calls', 0)} 次",
+        "message": f"[high] {title}：{dict(detail)}；本次队列已调用 {usage.get('llm_calls', 0)} 次",
         "channels": channels,
         "created_at": now_iso(),
         "disclaimer": ALERT_DISCLAIMER,
@@ -951,9 +964,7 @@ def _alert_event(
 # --------------------------------------------------------------------------- #
 
 
-def _read_rows(
-    path: Path, default_date: str
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _read_rows(path: Path, default_date: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     try:
         text = path.read_text(encoding="utf-8-sig")
     except OSError as exc:
@@ -983,13 +994,21 @@ def _read_rows(
             continue
         day = _cell(row, index, _DATE_KEYS) or default_date
         if not _DATE.match(day):
-            errors.append({"row": number, "code": code, "error": f"日期必须是 YYYY-MM-DD，收到 {day!r}"})
+            errors.append(
+                {"row": number, "code": code, "error": f"日期必须是 YYYY-MM-DD，收到 {day!r}"}
+            )
             continue
         priority_text = _cell(row, index, _PRIORITY_KEYS)
         try:
             priority = int(float(priority_text)) if priority_text else 0
         except ValueError:
-            errors.append({"row": number, "code": code, "error": f"priority 必须是整数，收到 {priority_text!r}"})
+            errors.append(
+                {
+                    "row": number,
+                    "code": code,
+                    "error": f"priority 必须是整数，收到 {priority_text!r}",
+                }
+            )
             continue
         rows.append({"code": code, "date": day, "priority": priority})
     return rows, errors
@@ -1025,9 +1044,7 @@ def _options(cfg: Mapping[str, Any]) -> QueueOptions:
         on_failure=str(queue_cfg.get("on_failure") or "skip"),
         max_llm_calls=int(per_queue.get("max_llm_calls", 1200) or 1200),
         max_total_tokens=int(per_queue.get("max_total_tokens", 8_000_000) or 8_000_000),
-        max_wall_clock_seconds=float(
-            per_queue.get("max_wall_clock_seconds", 28_800) or 28_800
-        ),
+        max_wall_clock_seconds=float(per_queue.get("max_wall_clock_seconds", 28_800) or 28_800),
         stale_running_seconds=float(queue_cfg.get("stale_running_seconds", 21_600) or 21_600),
         breaker_enabled=bool(breaker.get("enabled", True)),
         failure_threshold=max(1, int(breaker.get("failure_threshold", 5) or 5)),

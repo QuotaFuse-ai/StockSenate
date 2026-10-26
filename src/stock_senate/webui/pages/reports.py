@@ -39,9 +39,14 @@ async def index(request: Request) -> Response:
     body = Html(
         f'<form method="get" action="/reports" class="panel"><div class="row">'
         f'<div><label for="code">按标的过滤</label>'
-        f'<input id="code" type="text" name="code" value="{esc(code or "")}" placeholder="600519"></div>'
+        f'<input id="code" type="text" name="code" value="{esc(code or "")}"'
+        f' placeholder="600519"></div>'
         f'<div><button type="submit">筛选</button></div></div></form>'
-        + str(table(["运行", "标的", "日期", "评级", "数据", "标记"], body_rows, empty="还没有报告快照"))
+        + str(
+            table(
+                ["运行", "标的", "日期", "评级", "数据", "标记"], body_rows, empty="还没有报告快照"
+            )
+        )
     )
     return HTMLResponse(str(page(request, "报告", body, active="/reports")))
 
@@ -54,12 +59,28 @@ async def detail(request: Request) -> Response:
         markdown = store.render(run_id, home=service.home)
     except store.ReportNotFound:
         return HTMLResponse(
-            str(page(request, "报告", Html("<p>找不到这份报告。</p>"), active="/reports", error="报告不存在")),
+            str(
+                page(
+                    request,
+                    "报告",
+                    Html("<p>找不到这份报告。</p>"),
+                    active="/reports",
+                    error="报告不存在",
+                )
+            ),
             status_code=404,
         )
     except ValueError:
         return HTMLResponse(
-            str(page(request, "报告", Html("<p>运行 ID 不合法。</p>"), active="/reports", error="运行 ID 不合法")),
+            str(
+                page(
+                    request,
+                    "报告",
+                    Html("<p>运行 ID 不合法。</p>"),
+                    active="/reports",
+                    error="运行 ID 不合法",
+                )
+            ),
             status_code=400,
         )
 
@@ -67,7 +88,7 @@ async def detail(request: Request) -> Response:
     decision = state.get("decision") or {}
     meta = {
         "运行 ID": esc(summary.get("run_id")),
-        "标的 / 日期": f'{esc(summary.get("code"))} · {esc(summary.get("date"))}',
+        "标的 / 日期": f"{esc(summary.get('code'))} · {esc(summary.get('date'))}",
         "评级": _rating_tag(summary.get("rating")),
         "持有期": esc(summary.get("horizon")),
         "置信度": esc(summary.get("confidence")),
@@ -85,12 +106,14 @@ async def detail(request: Request) -> Response:
     body = f"""
 <div class="panel">
   <dl class="kv">
-    {''.join(f'<dt>{key}</dt><dd>{value}</dd>' for key, value in meta.items())}
+    {"".join(f"<dt>{key}</dt><dd>{value}</dd>" for key, value in meta.items())}
   </dl>
 </div>
 <div class="grid">
-  <div class="panel"><h2 style="margin-top:0">研究理由</h2><ul>{reasons or '<li class="muted">—</li>'}</ul></div>
-  <div class="panel"><h2 style="margin-top:0">风险提示</h2><ul>{risks or '<li class="muted">—</li>'}</ul></div>
+  <div class="panel"><h2 style="margin-top:0">研究理由</h2>
+  <ul>{reasons or '<li class="muted">—</li>'}</ul></div>
+  <div class="panel"><h2 style="margin-top:0">风险提示</h2>
+  <ul>{risks or '<li class="muted">—</li>'}</ul></div>
 </div>
 <h2>完整报告（Markdown）</h2>
 {pre(markdown)}

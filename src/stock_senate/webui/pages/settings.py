@@ -24,12 +24,10 @@ def _validation(report: dict) -> Html:
         return Html('<p class="notice ok">配置校验通过。</p>')
     errors = report.get("errors") or []
     rows = [
-        [esc(item.get("file")), esc(item.get("key")), esc(item.get("message"))]
-        for item in errors
+        [esc(item.get("file")), esc(item.get("key")), esc(item.get("message"))] for item in errors
     ]
     return Html(
-        '<div class="notice error">配置校验失败</div>'
-        + str(table(["文件", "键", "问题"], rows))
+        '<div class="notice error">配置校验失败</div>' + str(table(["文件", "键", "问题"], rows))
     )
 
 
@@ -38,8 +36,7 @@ def _warnings(report: dict) -> Html:
     if not warnings:
         return Html("")
     rows = [
-        [esc(item.get("file")), esc(item.get("key")), esc(item.get("message"))]
-        for item in warnings
+        [esc(item.get("file")), esc(item.get("key")), esc(item.get("message"))] for item in warnings
     ]
     return Html("<h2>警告</h2>" + str(table(["文件", "键", "提示"], rows)))
 
@@ -124,24 +121,31 @@ async def view(request: Request) -> Response:
     report = await run_in_threadpool(config_schema.validate_dir, service.config_dir)
     roles, role_error = _role_registry(service.config)
     body = Html(
-        str(_validation(report))
-        + str(_warnings(report))
-        + '<div class="panel"><dl class="kv">'
+        str(_validation(report)) + str(_warnings(report)) + '<div class="panel"><dl class="kv">'
         f"<dt>配置目录</dt><dd><code>{esc(service.config_dir)}</code></dd>"
         f"<dt>状态目录</dt><dd><code>{esc(service.home)}</code></dd>"
         f"<dt>配置指纹</dt><dd><code>{esc(service.config.get('config_hash'))}</code></dd>"
         "</dl></div>"
         + "<h2>角色席位</h2>"
-        + (f'<div class="notice error">角色配置不合法：{esc(role_error)}</div>' if role_error else "")
+        + (
+            f'<div class="notice error">角色配置不合法：{esc(role_error)}</div>'
+            if role_error
+            else ""
+        )
         + str(_roles_table(request, roles))
-        + '<p class="muted">调整角色只写 <code>agent_roles.toml</code>，写入前会重新校验席位上限（DEC-005）。</p>'
+        + '<p class="muted">调整角色只写 <code>agent_roles.toml</code>，'
+        + "写入前会重新校验席位上限（DEC-005）。</p>"
         + "<h2>最近写操作</h2>"
         + str(_writes_table(recent_writes(service.home, limit=20)))
         + "<h2>配置</h2>"
         + str(_config_view(service.redacted_config()))
     )
     return HTMLResponse(
-        str(page(request, "设置", body, active="/settings", notice=request.query_params.get("notice")))
+        str(
+            page(
+                request, "设置", body, active="/settings", notice=request.query_params.get("notice")
+            )
+        )
     )
 
 

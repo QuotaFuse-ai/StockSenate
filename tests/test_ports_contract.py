@@ -72,14 +72,6 @@ def compose_healthcheck_path() -> str:
     return match.group(1) or "/"
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "defect QUOT-51-09: compose polls /_stcore/health (Streamlit) but the "
-        "Starlette app serves /healthz, so webui never turns healthy and the "
-        "mcp service (depends_on service_healthy) never starts"
-    ),
-)
 def test_compose_healthcheck_hits_a_route_the_app_serves(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

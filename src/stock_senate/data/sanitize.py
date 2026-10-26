@@ -91,9 +91,7 @@ def compliance_filter(text: str, replacement: str = "［已按要求移除可执
     if not text:
         return ""
     kept = [
-        sentence
-        for sentence in _SENTENCE_SPLIT.split(str(text))
-        if not compliance_scan(sentence)
+        sentence for sentence in _SENTENCE_SPLIT.split(str(text)) if not compliance_scan(sentence)
     ]
     stripped = "".join(kept).strip()
     return stripped if stripped else replacement

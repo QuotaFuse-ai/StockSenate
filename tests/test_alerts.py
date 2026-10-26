@@ -23,8 +23,7 @@ import pytest
 
 from stock_senate.alerts import engine
 from stock_senate.alerts import rules as rulebook
-from stock_senate.alerts.channels import dispatch
-from stock_senate.alerts.channels import webhook
+from stock_senate.alerts.channels import dispatch, webhook
 from stock_senate.alerts.state import AlertState, in_quiet_hours
 
 CODE = "600519"
@@ -40,9 +39,7 @@ MORNING = datetime(2026, 10, 26, 10, 0, 0)
 def test_dedup_uses_the_longer_of_cooldown_and_dedup_window(tmp_path: Path) -> None:
     state = AlertState(tmp_path / "state.json", dedup_hours=12)
 
-    status, event = state.decide(
-        "price_limit", CODE, fired=True, event={"id": "e1"}, now=MORNING
-    )
+    status, event = state.decide("price_limit", CODE, fired=True, event={"id": "e1"}, now=MORNING)
     assert status == "triggered"
     assert event == {"id": "e1"}
 
@@ -100,20 +97,15 @@ def test_daily_cap_suppresses_across_codes(tmp_path: Path) -> None:
     )
     # The cap is per rule and per day: a fresh day starts over.
     assert (
-        state.decide("r", "000001", fired=True, now=MORNING + timedelta(days=1))[0]
-        == "triggered"
+        state.decide("r", "000001", fired=True, now=MORNING + timedelta(days=1))[0] == "triggered"
     )
 
 
 def test_quiet_hours_defer_one_event_and_release_it(tmp_path: Path) -> None:
-    state = AlertState(
-        tmp_path / "state.json", dedup_hours=0, quiet_hours=["23:30-07:00"]
-    )
+    state = AlertState(tmp_path / "state.json", dedup_hours=0, quiet_hours=["23:30-07:00"])
     quiet = datetime(2026, 10, 26, 23, 45)
 
-    status, event = state.decide(
-        "r", CODE, fired=True, event={"id": "e1"}, now=quiet
-    )
+    status, event = state.decide("r", CODE, fired=True, event={"id": "e1"}, now=quiet)
     assert (status, event) == ("quiet", None)
     # A second trigger while still quiet must not queue a duplicate.
     state.decide("r", CODE, fired=True, event={"id": "e1"}, now=quiet + timedelta(minutes=5))
@@ -166,18 +158,14 @@ def test_quiet_hour_windows(spec: str, moment: str, expected: bool) -> None:
 
 
 def test_condition_parses_and_combines_as_three_valued_or() -> None:
-    condition = rulebook.parse_condition(
-        "quote.change_pct >= 9.8 or kline.volume_ratio_5d >= 2"
-    )
+    condition = rulebook.parse_condition("quote.change_pct >= 9.8 or kline.volume_ratio_5d >= 2")
     # One decided true wins even when the other side is undecidable.
     assert rulebook.evaluate(condition, {"quote.change_pct": 9.9})[0] is True
     # One undecidable clause with no true clause leaves the rule unknown.
     assert rulebook.evaluate(condition, {"quote.change_pct": 1.0})[0] is None
     assert rulebook.evaluate(condition, {})[0] is None
     assert (
-        rulebook.evaluate(
-            condition, {"quote.change_pct": 1.0, "kline.volume_ratio_5d": 1.2}
-        )[0]
+        rulebook.evaluate(condition, {"quote.change_pct": 1.0, "kline.volume_ratio_5d": 1.2})[0]
         is False
     )
 
@@ -192,7 +180,7 @@ def test_referenced_domains_skips_envelope_and_invalid_rules() -> None:
     rules = [
         {"id": "a", "when": "quote.change_pct >= 9.8"},
         {"id": "b", "when": "kline.volume_ratio_5d >= 2 or quote.price > 10"},
-        {"id": "c", "when": "data_envelope.data_source_status == \"missing\""},
+        {"id": "c", "when": 'data_envelope.data_source_status == "missing"'},
         {"id": "d", "when": "not a condition"},
     ]
     assert rulebook.referenced_domains(rules) == ["quote", "kline"]
@@ -230,14 +218,10 @@ def hook_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_signature_and_idempotency_key() -> None:
     body = b'{"a": 1}'
-    expected = "sha256=" + hmac.new(
-        SECRET.encode("utf-8"), body, hashlib.sha256
-    ).hexdigest()
+    expected = "sha256=" + hmac.new(SECRET.encode("utf-8"), body, hashlib.sha256).hexdigest()
     assert webhook.sign(SECRET, body) == expected
     assert webhook.idempotency_key(EVENT) == webhook.idempotency_key(dict(EVENT))
-    assert webhook.idempotency_key({**EVENT, "code": "600036"}) != webhook.idempotency_key(
-        EVENT
-    )
+    assert webhook.idempotency_key({**EVENT, "code": "600036"}) != webhook.idempotency_key(EVENT)
 
 
 def test_send_signs_and_never_leaks_the_secret(
@@ -275,9 +259,7 @@ def test_send_reports_missing_env_without_echoing_values(
     assert "STOCKSENATE_TEST_HOOK_URL" in result["detail"]
 
 
-def test_send_rejects_a_non_http_url(
-    monkeypatch: pytest.MonkeyPatch, hook_env: None
-) -> None:
+def test_send_rejects_a_non_http_url(monkeypatch: pytest.MonkeyPatch, hook_env: None) -> None:
     monkeypatch.setenv("STOCKSENATE_TEST_HOOK_URL", "ftp://alerts.example.test/hook")
     assert webhook.send(EVENT, _hook_config()) == {
         "channel": "webhook",
@@ -286,9 +268,7 @@ def test_send_rejects_a_non_http_url(
     }
 
 
-def test_send_retries_then_reports_failure(
-    monkeypatch: pytest.MonkeyPatch, hook_env: None
-) -> None:
+def test_send_retries_then_reports_failure(monkeypatch: pytest.MonkeyPatch, hook_env: None) -> None:
     attempts: list[str] = []
 
     def failing(url: str, body: bytes, headers: dict[str, str]) -> int:
@@ -297,9 +277,7 @@ def test_send_retries_then_reports_failure(
 
     monkeypatch.setattr(webhook, "_post", failing)
 
-    result = webhook.send(
-        EVENT, _hook_config(max_retries=2, backoff_seconds=[0])
-    )
+    result = webhook.send(EVENT, _hook_config(max_retries=2, backoff_seconds=[0]))
 
     assert result == {
         "channel": "webhook",
@@ -310,9 +288,7 @@ def test_send_retries_then_reports_failure(
     assert len(attempts) == 3
 
 
-def test_send_retries_after_an_http_error(
-    monkeypatch: pytest.MonkeyPatch, hook_env: None
-) -> None:
+def test_send_retries_after_an_http_error(monkeypatch: pytest.MonkeyPatch, hook_env: None) -> None:
     codes = iter([500, 200])
 
     def flaky(url: str, body: bytes, headers: dict[str, str]) -> int:
@@ -394,9 +370,7 @@ def alert_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     return _alert_config(root)
 
 
-def test_dry_run_reports_would_fire_and_unknown(
-    alert_config: dict, tmp_path: Path
-) -> None:
+def test_dry_run_reports_would_fire_and_unknown(alert_config: dict, tmp_path: Path) -> None:
     result = engine.dry_run(
         "limit_move",
         config=alert_config,
@@ -431,9 +405,7 @@ def test_dry_run_rejects_an_unknown_rule(alert_config: dict, tmp_path: Path) -> 
     assert result["available"] == ["limit_move"]
 
 
-def test_dry_run_marks_a_broken_condition_invalid(
-    alert_config: dict, tmp_path: Path
-) -> None:
+def test_dry_run_marks_a_broken_condition_invalid(alert_config: dict, tmp_path: Path) -> None:
     alert_config["alert_rules"]["rules"][0]["when"] = "quote.change_pct ~ 9.8"
     result = engine.dry_run(
         "limit_move",
@@ -447,9 +419,7 @@ def test_dry_run_marks_a_broken_condition_invalid(
     assert result["triggered"] == 0
 
 
-def test_evaluate_once_delivers_then_dedups(
-    alert_config: dict, tmp_path: Path, capsys
-) -> None:
+def test_evaluate_once_delivers_then_dedups(alert_config: dict, tmp_path: Path, capsys) -> None:
     home = tmp_path / "home"
 
     first = engine.evaluate_once(

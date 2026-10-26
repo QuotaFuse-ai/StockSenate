@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 
@@ -39,6 +41,33 @@ def test_version() -> None:
     result = run_cli("version")
     assert result.returncode == 0
     assert result.stdout.strip().startswith("stocksenate ")
+
+
+def test_version_flag_matches_version_command() -> None:
+    flag = run_cli("--version")
+    command = run_cli("version")
+    assert flag.returncode == 0
+    assert flag.stdout == command.stdout
+
+
+def test_stocksenate_prefix_wins_over_legacy(monkeypatch: pytest.MonkeyPatch) -> None:
+    from stock_senate import cli
+
+    monkeypatch.setenv("STOCKSENATE_CONFIG_DIR", str(ROOT / "config"))
+    monkeypatch.setenv("TRADINGAGENTS_CONFIG_DIR", str(ROOT / "ignored-a"))
+    monkeypatch.setenv("QF_COUNCIL_CONFIG_DIR", str(ROOT / "ignored-b"))
+
+    assert cli._config_dir() == ROOT / "config"
+
+
+def test_tradingagents_precedes_qf_council(monkeypatch: pytest.MonkeyPatch) -> None:
+    from stock_senate import cli
+
+    monkeypatch.delenv("STOCKSENATE_CONFIG_DIR", raising=False)
+    monkeypatch.setenv("TRADINGAGENTS_CONFIG_DIR", str(ROOT / "legacy-a"))
+    monkeypatch.setenv("QF_COUNCIL_CONFIG_DIR", str(ROOT / "legacy-b"))
+
+    assert cli._config_dir() == ROOT / "legacy-a"
 
 
 def test_help_lists_documented_commands() -> None:

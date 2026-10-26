@@ -110,9 +110,7 @@ def test_priority_duplicates_and_invalid_rows(tmp_path: Path) -> None:
             "bad,not-a-date,0",
         ],
     )
-    result = manager.submit_file(
-        source, concurrency=1, home=tmp_path, config=CONFIG, runner=runner
-    )
+    result = manager.submit_file(source, concurrency=1, home=tmp_path, config=CONFIG, runner=runner)
 
     assert probe.order == ["600002", "600003", "600001"]
     assert [row["reason"] for row in result["skipped"]] == ["duplicate_in_file"]

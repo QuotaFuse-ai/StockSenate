@@ -227,9 +227,7 @@ def build(*, config: Any = None, home: Path | str | None = None) -> Any:
     async def healthz(request: Any) -> Any:  # noqa: ANN401 - Starlette Request
         from starlette.responses import JSONResponse
 
-        return JSONResponse(
-            {"service": SERVICE_NAME, "status": "ok", "version": __version__}
-        )
+        return JSONResponse({"service": SERVICE_NAME, "status": "ok", "version": __version__})
 
     return server
 

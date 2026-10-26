@@ -10,8 +10,9 @@ and a still-escalating bear would end the debate early.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 _PUNCTUATION = re.compile(r"[\s，。；：、！？,.;:!?\"'“”‘’（）()\[\]【】<>《》\-—_]+")
 
@@ -67,8 +68,7 @@ def converged(
     if not previous:
         return False, {}
     ratios = {
-        side: new_point_ratio(current.get(side, ()), previous.get(side, ()))
-        for side in current
+        side: new_point_ratio(current.get(side, ()), previous.get(side, ())) for side in current
     }
     if not ratios:
         return False, {}

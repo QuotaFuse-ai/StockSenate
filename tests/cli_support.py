@@ -11,9 +11,10 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Iterable
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -135,9 +136,7 @@ def write_archive(
         else:
             payload = {
                 "code": code,
-                "items": [
-                    {"title": f"{domain} sample", "summary": "sample", "value": 1.0}
-                ],
+                "items": [{"title": f"{domain} sample", "summary": "sample", "value": 1.0}],
             }
         _write_json(root / domain / code / f"{day}.json", {"data": payload, "data_as_of": day})
     return root

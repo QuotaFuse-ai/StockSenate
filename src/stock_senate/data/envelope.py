@@ -13,31 +13,31 @@ that did not come from a provider cannot enter the graph.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from datetime import date as date_cls
-from datetime import datetime, timezone
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 FORBIDDEN_FILL_KEYS = frozenset(
     {"llm_fill", "llm_inferred", "synthetic", "model_estimate", "fabricated", "invented"}
 )
 
 
-class Freshness(str, Enum):
+class Freshness(StrEnum):
     REALTIME = "realtime"
     CACHED = "cached"
     ARCHIVE = "archive"
 
 
-class Confidence(str, Enum):
+class Confidence(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
 
 
-class SourceStatus(str, Enum):
+class SourceStatus(StrEnum):
     OK = "ok"
     DEGRADED = "degraded"
     MISSING = "missing"
@@ -130,7 +130,7 @@ class DataEnvelope(BaseModel):
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def assert_no_llm_fill(payload: Any, *, path: str = "payload") -> None:
@@ -145,16 +145,17 @@ def assert_no_llm_fill(payload: Any, *, path: str = "payload") -> None:
             assert_no_llm_fill(item, path=f"{path}[{index}]")
 
 
-def classify_freshness(data_as_of: str, *, realtime_max_seconds: int = 900,
-                       cached_max_seconds: int = 86400) -> Freshness:
+def classify_freshness(
+    data_as_of: str, *, realtime_max_seconds: int = 900, cached_max_seconds: int = 86400
+) -> Freshness:
     """Classify an envelope's freshness against wall-clock now."""
     try:
         moment = datetime.fromisoformat(data_as_of.replace("Z", "+00:00"))
         if moment.tzinfo is None:
-            moment = moment.replace(tzinfo=timezone.utc)
+            moment = moment.replace(tzinfo=UTC)
     except (ValueError, AttributeError):
         return Freshness.ARCHIVE
-    age = (datetime.now(timezone.utc) - moment).total_seconds()
+    age = (datetime.now(UTC) - moment).total_seconds()
     if age <= realtime_max_seconds:
         return Freshness.REALTIME
     if age <= cached_max_seconds:

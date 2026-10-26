@@ -61,7 +61,12 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[all]" pip-audit
-      - run: pip-audit --strict --progress-spinner off
+      # `stocksenate` itself is installed here and is not on PyPI yet, so it can
+      # never be audited; --skip-editable reports it as skipped instead of
+      # failing. Not using --strict for that same reason: it would turn "our own
+      # package is unpublished" into a red job without saying anything about the
+      # third-party dependencies this gate exists to check.
+      - run: pip-audit --skip-editable --progress-spinner off
 
   package:
     runs-on: ubuntu-latest

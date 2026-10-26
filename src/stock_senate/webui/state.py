@@ -10,10 +10,11 @@ import copy
 import json
 import threading
 import uuid
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from stock_senate.config.loader import ensure_home, env, load_config
 from stock_senate.data.codes import normalize_code
@@ -40,7 +41,7 @@ MAX_JOBS = 200
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 @dataclass
@@ -84,7 +85,9 @@ class AnalysisJob:
 
 
 class WebRuntime:
-    def __init__(self, *, config_dir: Path | str | None = None, auth: WebAuth | None = None) -> None:
+    def __init__(
+        self, *, config_dir: Path | str | None = None, auth: WebAuth | None = None
+    ) -> None:
         self.config = load_config(config_dir)
         self.config_dir = Path(str(self.config.get("config_dir") or config_dir or ".")).expanduser()
         self.home = ensure_home(Path(str(self.config.get("home"))))
@@ -190,7 +193,9 @@ class WebRuntime:
                 job.run_id = str(decision.get("run_id") or job.run_id or "") or job.run_id
                 job.finished_at = job.finished_at or _now()
         except Exception as exc:  # noqa: BLE001 - surfaced on the progress page
-            log.warning("webui analysis failed", extra={"event": "webui_analysis_failed", "job": job.job_id})
+            log.warning(
+                "webui analysis failed", extra={"event": "webui_analysis_failed", "job": job.job_id}
+            )
             with self._lock:
                 job.status = "failed"
                 job.error = str(redact(exc))

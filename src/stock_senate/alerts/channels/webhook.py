@@ -16,8 +16,9 @@ import json
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 _DEFAULT_BACKOFF = (2, 10, 30)
 _TIMEOUT = 10.0
@@ -28,7 +29,9 @@ def sign(secret: str, body: bytes) -> str:
 
 
 def idempotency_key(event: Mapping[str, Any]) -> str:
-    seed = f"{event.get('id') or ''}|{event.get('rule', {}).get('id') or ''}|{event.get('code') or ''}"
+    seed = (
+        f"{event.get('id') or ''}|{event.get('rule', {}).get('id') or ''}|{event.get('code') or ''}"
+    )
     return hashlib.sha256(seed.encode("utf-8")).hexdigest()
 
 
@@ -38,8 +41,9 @@ def _post(url: str, body: bytes, headers: Mapping[str, str]) -> int:
         return int(getattr(response, "status", 200))
 
 
-def send(event: Mapping[str, Any], config: Mapping[str, Any], *,
-         home: Path | str | None = None) -> dict[str, Any]:
+def send(
+    event: Mapping[str, Any], config: Mapping[str, Any], *, home: Path | str | None = None
+) -> dict[str, Any]:
     import os
 
     url_env = str(config.get("url_env") or "")
@@ -60,8 +64,9 @@ def send(event: Mapping[str, Any], config: Mapping[str, Any], *,
     headers = {
         "Content-Type": "application/json; charset=utf-8",
         str(config.get("signature_header") or "X-StockSenate-Signature"): sign(secret, body),
-        str(config.get("idempotency_header") or "X-StockSenate-Idempotency-Key"):
-            idempotency_key(event),
+        str(config.get("idempotency_header") or "X-StockSenate-Idempotency-Key"): idempotency_key(
+            event
+        ),
     }
     backoff = list(config.get("backoff_seconds") or _DEFAULT_BACKOFF)
     attempts = 1 + max(0, int(config.get("max_retries", len(backoff))))
@@ -75,8 +80,7 @@ def send(event: Mapping[str, Any], config: Mapping[str, Any], *,
             last = type(exc).__name__
         else:
             if 200 <= status < 300:
-                return {"channel": "webhook", "ok": True, "attempts": index + 1,
-                        "status": status}
+                return {"channel": "webhook", "ok": True, "attempts": index + 1, "status": status}
             last = f"http_{status}"
         if index + 1 < attempts:
             delay = backoff[min(index, len(backoff) - 1)] if backoff else 0

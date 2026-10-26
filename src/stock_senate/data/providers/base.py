@@ -51,8 +51,9 @@ class Provider(ABC):
 
     kind = "base"
 
-    def __init__(self, name: str, config: dict[str, Any] | None = None, *,
-                 home: Path | None = None) -> None:
+    def __init__(
+        self, name: str, config: dict[str, Any] | None = None, *, home: Path | None = None
+    ) -> None:
         self.name = name
         self.config = dict(config or {})
         self.home = Path(home).expanduser() if home else None
@@ -66,8 +67,9 @@ class Provider(ABC):
         return not declared or domain in declared
 
     @abstractmethod
-    def fetch(self, domain: str, code: str, as_of: str,
-              params: dict[str, Any] | None = None) -> DataEnvelope:
+    def fetch(
+        self, domain: str, code: str, as_of: str, params: dict[str, Any] | None = None
+    ) -> DataEnvelope:
         """Return one envelope or raise ``ProviderNotAvailable`` / ``ProviderError``."""
 
     def _root(self) -> Path:
@@ -103,17 +105,23 @@ def envelope_from_payload(
     meta = dict(meta or {})
     fetched_at = str(meta.get("fetched_at") or now_iso())
     confidence_raw = str(meta.get("confidence") or default_confidence).lower()
-    confidence = Confidence(confidence_raw) if confidence_raw in {
-        item.value for item in Confidence
-    } else Confidence.MEDIUM
+    confidence = (
+        Confidence(confidence_raw)
+        if confidence_raw in {item.value for item in Confidence}
+        else Confidence.MEDIUM
+    )
     status_raw = str(meta.get("data_source_status") or meta.get("status") or "ok").lower()
-    status = SourceStatus(status_raw) if status_raw in {
-        item.value for item in SourceStatus
-    } else SourceStatus.OK
+    status = (
+        SourceStatus(status_raw)
+        if status_raw in {item.value for item in SourceStatus}
+        else SourceStatus.OK
+    )
     freshness_raw = str(meta.get("freshness") or "").lower()
-    freshness = Freshness(freshness_raw) if freshness_raw in {
-        item.value for item in Freshness
-    } else classify_freshness(data_as_of)
+    freshness = (
+        Freshness(freshness_raw)
+        if freshness_raw in {item.value for item in Freshness}
+        else classify_freshness(data_as_of)
+    )
     return DataEnvelope(
         domain=domain,
         code=code,

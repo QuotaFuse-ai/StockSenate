@@ -8,7 +8,8 @@ that somehow reached a role output can never reach a report file.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from stock_senate.data.sanitize import compliance_filter
 
@@ -56,7 +57,7 @@ def _table(header: list[str], rows: list[list[Any]]) -> list[str]:
 
 
 def _section_titles(template: Mapping[str, Any] | None) -> list[tuple[str, str]]:
-    sections = dict(((template or {}).get("sections") or {}))
+    sections = dict((template or {}).get("sections") or {})
     if not sections:
         return list(_DEFAULT_SECTIONS)
     titles = []
@@ -111,9 +112,7 @@ def render_markdown(
     title = str(meta.get("title") or "{code} {name} 投研合议报告").format(code=code, name="")
     lines.append(f"# {title.strip()}")
     lines.append("")
-    lines.append(
-        f"- 标的：`{code}` · 分析日期：`{date}` · 运行：`{state.get('run_id', '')}`"
-    )
+    lines.append(f"- 标的：`{code}` · 分析日期：`{date}` · 运行：`{state.get('run_id', '')}`")
     lines.append(
         f"- 研究评级：**{RATING_LABEL.get(str(decision.get('rating')), '未知')}**"
         f" · 持有期：{decision.get('horizon', 'unknown')}"
@@ -137,8 +136,7 @@ def render_markdown(
 
     disclaimer = dict((template or {}).get("disclaimer") or {})
     text = str(
-        disclaimer.get("text")
-        or "本报告由 AI 自动生成，仅用于研究与教学，不构成任何投资建议。"
+        disclaimer.get("text") or "本报告由 AI 自动生成，仅用于研究与教学，不构成任何投资建议。"
     ).strip()
     includes = meta.get("include_disclaimer", True)
     if includes:
@@ -279,7 +277,9 @@ def _render_decision(state: Mapping[str, Any], title: str) -> list[str]:
         return []
     out = [f"## {title}", ""]
     out.append(f"- 研究评级：**{RATING_LABEL.get(str(decision.get('rating')), '未知')}**")
-    out.append(f"- 持有期：{decision.get('horizon', 'unknown')} · 置信度：{decision.get('confidence', 0)}")
+    out.append(
+        f"- 持有期：{decision.get('horizon', 'unknown')} · 置信度：{decision.get('confidence', 0)}"
+    )
     if decision.get("low_quality"):
         out.append("- 质量闸门：低于阈值，需人工复核。")
     reasons = list(decision.get("reasons") or [])
@@ -343,8 +343,10 @@ def _render_data(state: Mapping[str, Any], title: str) -> list[str]:
         f" · ok {summary.get('ok', 0)} / degraded {summary.get('degraded', 0)}"
         f" / missing {summary.get('missing', 0)}"
     )
+    digest_domains = dict((data.get("digest") or {}).get("domains") or {})
     rows = []
     for domain, envelope in sorted(domains.items()):
+        digest_entry = dict(digest_domains.get(domain) or {})
         rows.append(
             [
                 domain,
@@ -353,13 +355,14 @@ def _render_data(state: Mapping[str, Any], title: str) -> list[str]:
                 envelope.get("freshness"),
                 envelope.get("confidence"),
                 envelope.get("data_source_status"),
+                digest_entry.get("fact_count", len(digest_entry.get("facts") or [])),
                 envelope.get("source_detail"),
             ]
         )
     out.append("")
     out.extend(
         _table(
-            ["数据域", "来源", "数据日期", "新鲜度", "置信度", "状态", "说明"],
+            ["数据域", "来源", "数据日期", "新鲜度", "置信度", "状态", "事实条数", "说明"],
             rows,
         )
     )

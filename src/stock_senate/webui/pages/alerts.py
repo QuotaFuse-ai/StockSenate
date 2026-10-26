@@ -33,7 +33,7 @@ def _rules_section(config: dict) -> Html:
             esc(rule.get("id")),
             esc(rule.get("name")),
             tag(rule.get("level", "mid"), _LEVELS.get(str(rule.get("level")), "")),
-            Html(f'<code>{esc(rule.get("when"))}</code>'),
+            Html(f"<code>{esc(rule.get('when'))}</code>"),
             esc(rule.get("cooldown_minutes")),
             esc(", ".join(rule.get("channels") or [])),
         ]
@@ -41,7 +41,12 @@ def _rules_section(config: dict) -> Html:
     ]
     channels = redact(section.get("channels") or {})
     channel_rows = [
-        [esc(name), esc(settings.get("enabled")), esc(settings.get("level")), esc(_channel_detail(settings))]
+        [
+            esc(name),
+            esc(settings.get("enabled")),
+            esc(settings.get("level")),
+            esc(_channel_detail(settings)),
+        ]
         for name, settings in channels.items()
         if isinstance(settings, dict)
     ]
@@ -59,7 +64,9 @@ def _rules_section(config: dict) -> Html:
         + '<p class="muted">Webhook 发送前签名（X-StockSenate-Signature）并携带幂等键；'
         "密钥只从 <code>*_env</code> 指定的环境变量读取，页面不回显。</p>"
         + "<h2>规则</h2>"
-        + str(table(["ID", "名称", "级别", "条件", "冷却(分钟)", "渠道"], rule_rows, empty="没有规则"))
+        + str(
+            table(["ID", "名称", "级别", "条件", "冷却(分钟)", "渠道"], rule_rows, empty="没有规则")
+        )
     )
 
 
@@ -76,7 +83,10 @@ def _validation(config: dict) -> Html:
     errors = report.get("errors") or []
     return Html(
         '<div class="notice error">规则校验失败：'
-        + "; ".join(f"{esc(item.get('file'))}:{esc(item.get('key'))} {esc(item.get('message'))}" for item in errors)
+        + "; ".join(
+            f"{esc(item.get('file'))}:{esc(item.get('key'))} {esc(item.get('message'))}"
+            for item in errors
+        )
         + "</div>"
     )
 
@@ -110,8 +120,9 @@ def _dry_run_result(payload: dict) -> Html:
     ]
     note = f'<p class="notice warn">{esc(payload.get("note"))}</p>' if payload.get("note") else ""
     head = (
-        f'<p>试跑日期 {esc(payload.get("as_of"))} · 标的 {esc(", ".join(payload.get("codes") or []))} · '
-        f'触发 {esc(payload.get("triggered"))} · 未知 {esc(payload.get("unknown"))}</p>'
+        f"<p>试跑日期 {esc(payload.get('as_of'))} · "
+        f"标的 {esc(', '.join(payload.get('codes') or []))} · "
+        f"触发 {esc(payload.get('triggered'))} · 未知 {esc(payload.get('unknown'))}</p>"
     )
     return Html(
         head
@@ -136,7 +147,11 @@ def _delivered(home: object) -> Html:
         rows.append(
             [
                 esc(event.get("created_at") or event.get("delivered_at")),
-                esc((event.get("rule") or {}).get("id") if isinstance(event.get("rule"), dict) else event.get("rule")),
+                esc(
+                    (event.get("rule") or {}).get("id")
+                    if isinstance(event.get("rule"), dict)
+                    else event.get("rule")
+                ),
                 esc(event.get("code")),
                 tag(str(event.get("level") or "mid"), _LEVELS.get(str(event.get("level")), "")),
                 esc(event.get("message")),

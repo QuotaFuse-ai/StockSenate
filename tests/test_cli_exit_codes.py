@@ -2,9 +2,7 @@
 
 Spec (``docs/specs/cli-reference.md``): ``0`` success · ``2`` bad arguments ·
 ``3`` bad configuration · ``4`` data unavailable · ``7`` rate limited ·
-``8`` partial failure. Each code has at least one black-box case; the two
-cases that still expose a product defect are marked ``xfail(strict=False)`` and
-carry the expected behaviour in their reason.
+``8`` partial failure. Each code has at least one black-box case.
 """
 
 from __future__ import annotations
@@ -14,9 +12,6 @@ import shutil
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
-
-import stock_senate.cli as cli
 from cli_support import (
     CODE,
     CONFIG,
@@ -28,6 +23,9 @@ from cli_support import (
     write_archive,
     write_config_dir,
 )
+from typer.testing import CliRunner
+
+import stock_senate.cli as cli
 from stock_senate.graph.senate_graph import SenateGraph
 from stock_senate.roles.llm import LLMRateLimited
 
@@ -91,8 +89,17 @@ def test_backtest_missing_required_range_exits_2() -> None:
 
 def test_backtest_zero_window_exits_2(tmp_path: Path) -> None:
     result = run_cli(
-        "backtest", "run", "--code", CODE, "--start", START, "--end", DAY,
-        "--window", "0", env=full_env(tmp_path),
+        "backtest",
+        "run",
+        "--code",
+        CODE,
+        "--start",
+        START,
+        "--end",
+        DAY,
+        "--window",
+        "0",
+        env=full_env(tmp_path),
     )
 
     assert result.returncode == 2
@@ -102,7 +109,14 @@ def test_backtest_zero_window_exits_2(tmp_path: Path) -> None:
 
 def test_backtest_inverted_range_exits_2(tmp_path: Path) -> None:
     result = run_cli(
-        "backtest", "run", "--code", CODE, "--start", DAY, "--end", START,
+        "backtest",
+        "run",
+        "--code",
+        CODE,
+        "--start",
+        DAY,
+        "--end",
+        START,
         env=full_env(tmp_path),
     )
 
@@ -112,10 +126,19 @@ def test_backtest_inverted_range_exits_2(tmp_path: Path) -> None:
 
 
 def test_backtest_unknown_option_exits_2(tmp_path: Path) -> None:
-    """``--config`` is an ``analyze`` option; ``backtest run`` must reject it."""
+    """``backtest run`` accepts ``--config`` (cli-reference §2.3); other flags still fail."""
     result = run_cli(
-        "backtest", "run", "--code", CODE, "--start", START, "--end", DAY,
-        "--config", str(tmp_path), env=full_env(tmp_path),
+        "backtest",
+        "run",
+        "--code",
+        CODE,
+        "--start",
+        START,
+        "--end",
+        DAY,
+        "--not-an-option",
+        "x",
+        env=full_env(tmp_path),
     )
 
     assert result.returncode == 2
@@ -162,7 +185,12 @@ def test_forbid_llm_fill_false_is_a_config_error(tmp_path: Path) -> None:
 
 def test_analyze_without_data_exits_4(tmp_path: Path) -> None:
     result = run_cli(
-        "analyze", CODE, "--date", DAY, "--output", "json",
+        "analyze",
+        CODE,
+        "--date",
+        DAY,
+        "--output",
+        "json",
         env=full_env(tmp_path, empty_archive=True),
     )
 
@@ -173,8 +201,17 @@ def test_analyze_without_data_exits_4(tmp_path: Path) -> None:
 
 def test_backtest_without_data_exits_4(tmp_path: Path) -> None:
     result = run_cli(
-        "backtest", "run", "--code", CODE, "--start", START, "--end", DAY,
-        "--output", "json", env=full_env(tmp_path, empty_archive=True),
+        "backtest",
+        "run",
+        "--code",
+        CODE,
+        "--start",
+        START,
+        "--end",
+        DAY,
+        "--output",
+        "json",
+        env=full_env(tmp_path, empty_archive=True),
     )
 
     assert result.returncode == 4
@@ -188,8 +225,17 @@ def test_backtest_without_data_exits_4(tmp_path: Path) -> None:
 
 def test_partial_backtest_exits_8(tmp_path: Path) -> None:
     result = run_cli(
-        "backtest", "run", "--codes", f"{CODE},000001", "--start", START, "--end", DAY,
-        "--output", "json", env=full_env(tmp_path),
+        "backtest",
+        "run",
+        "--codes",
+        f"{CODE},000001",
+        "--start",
+        START,
+        "--end",
+        DAY,
+        "--output",
+        "json",
+        env=full_env(tmp_path),
     )
 
     assert result.returncode == 8
@@ -199,7 +245,7 @@ def test_partial_backtest_exits_8(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# 7 — rate limited (declared; analyze does not map it yet)
+# 7 — rate limited
 # --------------------------------------------------------------------------- #
 
 
@@ -207,11 +253,6 @@ def test_rate_limit_constant_is_declared() -> None:
     assert cli.EXIT_RATE_LIMIT == 7
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="defect QUOT-51-07: analyze lets LLMRateLimited escape; Click exits 1 "
-    "although EXIT_RATE_LIMIT=7 is declared in cli.py",
-)
 def test_rate_limited_analyze_exits_7(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(self, *args, **kwargs):  # noqa: ANN001 - patched boundary
         raise LLMRateLimited("429 too many requests")
@@ -223,32 +264,34 @@ def test_rate_limited_analyze_exits_7(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# confirmed contract gaps pinned as expected failures
+# argument and configuration classification inside analyze
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="defect QUOT-51-01: analyze rejects a malformed --date with an uncaught "
-    "ValueError (exit 1); cli-reference defines bad arguments as exit 2",
-)
 def test_malformed_date_is_a_usage_error(tmp_path: Path) -> None:
     result = run_cli(
-        "analyze", CODE, "--date", "not-a-date", "--output", "json",
+        "analyze",
+        CODE,
+        "--date",
+        "not-a-date",
+        "--output",
+        "json",
         env=full_env(tmp_path),
     )
 
     assert result.returncode == 2
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="defect QUOT-51-02: unknown --disable role raises RoleError out of analyze "
-    "(exit 1); unknown role is a configuration error, exit 3",
-)
 def test_unknown_disable_role_is_a_config_error(tmp_path: Path) -> None:
     result = run_cli(
-        "analyze", CODE, "--date", DAY, "--disable", "ghost", "--output", "json",
+        "analyze",
+        CODE,
+        "--date",
+        DAY,
+        "--disable",
+        "ghost",
+        "--output",
+        "json",
         env=full_env(tmp_path),
     )
 
@@ -269,9 +312,7 @@ def test_usage_errors_write_stderr_only() -> None:
 
 
 def test_json_success_keeps_stdout_parseable(tmp_path: Path) -> None:
-    result = run_cli(
-        "analyze", CODE, "--date", DAY, "--output", "json", env=full_env(tmp_path)
-    )
+    result = run_cli("analyze", CODE, "--date", DAY, "--output", "json", env=full_env(tmp_path))
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)

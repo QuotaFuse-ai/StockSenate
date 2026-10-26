@@ -12,6 +12,7 @@
 ## 1. 命令总览
 
 ```
+ssenate --version | -V
 ssenate version
 ssenate analyze CODE [OPTIONS]
 ssenate role list|show|validate|enable|disable
@@ -89,6 +90,7 @@ ssenate backtest run --code 600519 --code 000001 --start 2025-01-01 --end 2025-1
 | `--slippage` | 0.0 | 滑点（成交价比例） |
 | `--fee` | 0.0 | 单边手续费率 |
 | `--out-dir` | 空 | 结果目录 |
+| `--config, -c` | `~/.stock_senate` | 配置目录 |
 
 回测**不是** `performance`：前者是策略推演，后者是已保存决策的事后归因。
 
@@ -145,7 +147,7 @@ ssenate backtest run --code 600519 --code 000001 --start 2025-01-01 --end 2025-1
 
 ### 2.11 `ssenate sync-news`
 
-经 Newsieve 拉取并过滤资讯，`--since YYYY-MM-DD` 缺省 7 天前。
+经 TickHub-CN 拉取并过滤资讯（`eastmoney_global_news`），`--since YYYY-MM-DD` 缺省 7 天前。
 
 ---
 

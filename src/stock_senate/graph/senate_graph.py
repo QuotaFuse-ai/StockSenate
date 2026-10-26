@@ -13,9 +13,9 @@ before the final verdict and are recorded even when skipped.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from stock_senate.config.loader import ensure_home, load_config
 from stock_senate.data.envelope import date_only
@@ -112,7 +112,9 @@ class SenateGraph:
         envelopes = data.bundle(code, as_of=as_of, domains=self._domains(gate))
         digest = build_digest(envelopes, as_of=as_of)
         data_status = summarize(envelopes)
-        _progress(progress, "data", "done", domains=len(envelopes), data_status=data_status["status"])
+        _progress(
+            progress, "data", "done", domains=len(envelopes), data_status=data_status["status"]
+        )
 
         ctx = RunContext(
             code=code,
@@ -214,9 +216,7 @@ class SenateGraph:
 
             stage = "quality_gate"
             _progress(progress, stage, "running")
-            quality = run_quality_gate(
-                ctx, analysts, research, trade, risk.arguments, decision
-            )
+            quality = run_quality_gate(ctx, analysts, research, trade, risk.arguments, decision)
             if quality.low_quality and not decision.low_quality:
                 decision = decision.model_copy(update={"low_quality": True})
             _progress(progress, stage, "done", score=quality.score)
@@ -243,6 +243,7 @@ class SenateGraph:
             or bool(ctx.skipped)
             or bool(ctx.budget_tripped)
             or hitl_blocked(traces)
+            or bool(quality.partial)
         )
 
         state: dict[str, Any] = {

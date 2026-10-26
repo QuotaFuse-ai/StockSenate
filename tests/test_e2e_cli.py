@@ -12,14 +12,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-
 from cli_support import (
     CODE,
     CONFIG,
     DAY,
     START,
     cli_env,
-    kline_bars,
     parse_json,
     run_cli,
     walk_keys,
@@ -50,16 +48,35 @@ def workspace(tmp_path: Path) -> Workspace:
 
 def analyze(ws: Workspace, *extra: str):
     return run_cli(
-        "analyze", CODE, "--date", DAY, "--config", str(ws.config),
-        "--output", "json", *extra, env=ws.env(),
+        "analyze",
+        CODE,
+        "--date",
+        DAY,
+        "--config",
+        str(ws.config),
+        "--output",
+        "json",
+        *extra,
+        env=ws.env(),
     )
 
 
 def backtest(ws: Workspace, *extra: str, start: str = START, end: str = DAY):
     return run_cli(
-        "backtest", "run", "--code", CODE, "--start", start, "--end", end,
-        "--out-dir", str(ws.root / "backtest"), "--output", "json",
-        *extra, env=ws.env(),
+        "backtest",
+        "run",
+        "--code",
+        CODE,
+        "--start",
+        start,
+        "--end",
+        end,
+        "--out-dir",
+        str(ws.root / "backtest"),
+        "--output",
+        "json",
+        *extra,
+        env=ws.env(),
     )
 
 
@@ -117,7 +134,9 @@ def test_analyze_empty_archive_exits_4(workspace: Workspace) -> None:
     empty = Workspace(
         root=workspace.root,
         archive=write_archive(workspace.root / "empty" / "archive", domains=[]),
-        config=write_config_dir(workspace.root / "empty-config", workspace.root / "empty" / "archive"),
+        config=write_config_dir(
+            workspace.root / "empty-config", workspace.root / "empty" / "archive"
+        ),
         home=workspace.root / "empty-home",
     )
 
@@ -171,8 +190,16 @@ def test_backtest_full_flow_writes_artifacts(workspace: Workspace) -> None:
         assert trade["shares"] > 0
         assert trade["exit_date"] > trade["entry_date"]
         assert set(trade) == {
-            "code", "entry_date", "entry_price", "exit_date", "exit_price",
-            "shares", "fees", "pnl", "return_pct", "reason",
+            "code",
+            "entry_date",
+            "entry_price",
+            "exit_date",
+            "exit_price",
+            "shares",
+            "fees",
+            "pnl",
+            "return_pct",
+            "reason",
         }
     for row in payload["positions"] + payload["decisions"]:
         assert row["date"] <= DAY
@@ -188,9 +215,7 @@ def test_backtest_full_flow_writes_artifacts(workspace: Workspace) -> None:
 
 def test_backtest_costs_reduce_the_simulated_result(workspace: Workspace) -> None:
     plain = parse_json(backtest(workspace))
-    costly = parse_json(
-        backtest(workspace, "--slippage", "0.01", "--fee", "0.001")
-    )
+    costly = parse_json(backtest(workspace, "--slippage", "0.01", "--fee", "0.001"))
 
     assert costly["metrics"]["final_equity"] < plain["metrics"]["final_equity"]
     assert any(trade["fees"] > 0 for trade in costly["trades"])
@@ -203,12 +228,24 @@ def test_backtest_empty_archive_exits_4(workspace: Workspace) -> None:
     empty = Workspace(
         root=workspace.root,
         archive=write_archive(workspace.root / "empty-bt" / "archive", domains=[]),
-        config=write_config_dir(workspace.root / "empty-bt-config", workspace.root / "empty-bt" / "archive"),
+        config=write_config_dir(
+            workspace.root / "empty-bt-config", workspace.root / "empty-bt" / "archive"
+        ),
         home=workspace.root / "empty-bt-home",
     )
     result = run_cli(
-        "backtest", "run", "--code", CODE, "--start", START, "--end", DAY,
-        "--out-dir", str(workspace.root / "empty-bt" / "out"), "--output", "json",
+        "backtest",
+        "run",
+        "--code",
+        CODE,
+        "--start",
+        START,
+        "--end",
+        DAY,
+        "--out-dir",
+        str(workspace.root / "empty-bt" / "out"),
+        "--output",
+        "json",
         env=empty.env(),
     )
 
@@ -220,8 +257,18 @@ def test_backtest_empty_archive_exits_4(workspace: Workspace) -> None:
 
 def test_backtest_missing_code_reports_partial_exit_8(workspace: Workspace) -> None:
     result = run_cli(
-        "backtest", "run", "--codes", f"{CODE},000001", "--start", START, "--end", DAY,
-        "--out-dir", str(workspace.root / "partial"), "--output", "json",
+        "backtest",
+        "run",
+        "--codes",
+        f"{CODE},000001",
+        "--start",
+        START,
+        "--end",
+        DAY,
+        "--out-dir",
+        str(workspace.root / "partial"),
+        "--output",
+        "json",
         env=workspace.env(),
     )
 
@@ -236,13 +283,33 @@ def test_backtest_missing_code_reports_partial_exit_8(workspace: Workspace) -> N
 
 def test_backtest_replay_is_reproducible_across_out_dirs(workspace: Workspace) -> None:
     first = run_cli(
-        "backtest", "run", "--code", CODE, "--start", START, "--end", DAY,
-        "--out-dir", str(workspace.root / "replay-a"), "--output", "json",
+        "backtest",
+        "run",
+        "--code",
+        CODE,
+        "--start",
+        START,
+        "--end",
+        DAY,
+        "--out-dir",
+        str(workspace.root / "replay-a"),
+        "--output",
+        "json",
         env=workspace.env(),
     )
     second = run_cli(
-        "backtest", "run", "--code", CODE, "--start", START, "--end", DAY,
-        "--out-dir", str(workspace.root / "replay-b"), "--output", "json",
+        "backtest",
+        "run",
+        "--code",
+        CODE,
+        "--start",
+        START,
+        "--end",
+        DAY,
+        "--out-dir",
+        str(workspace.root / "replay-b"),
+        "--output",
+        "json",
         env=workspace.env(),
     )
 
@@ -259,8 +326,15 @@ def test_backtest_replay_is_reproducible_across_out_dirs(workspace: Workspace) -
 
 def test_analyze_csv_writes_one_row_and_no_json_payload(workspace: Workspace) -> None:
     result = run_cli(
-        "analyze", CODE, "--date", DAY, "--config", str(workspace.config),
-        "--output", "csv", env=workspace.env(),
+        "analyze",
+        CODE,
+        "--date",
+        DAY,
+        "--config",
+        str(workspace.config),
+        "--output",
+        "csv",
+        env=workspace.env(),
     )
 
     assert result.returncode == 0, result.stderr
@@ -272,7 +346,12 @@ def test_analyze_csv_writes_one_row_and_no_json_payload(workspace: Workspace) ->
 
 def test_role_list_json_matches_the_configured_roles(workspace: Workspace) -> None:
     result = run_cli(
-        "role", "list", "--config", str(CONFIG), "--output", "json",
+        "role",
+        "list",
+        "--config",
+        str(CONFIG),
+        "--output",
+        "json",
         env=workspace.env(),
     )
 
@@ -281,8 +360,20 @@ def test_role_list_json_matches_the_configured_roles(workspace: Workspace) -> No
     assert len(rows) == 16
     assert {"role", "display_name", "enabled", "model"} == set(rows[0])
     assert {row["role"] for row in rows} == {
-        "market", "social", "news", "fundamentals", "policy", "hot_money", "lockup",
-        "bull", "bear", "research_manager", "trader",
-        "risk_aggressive", "risk_neutral", "risk_conservative",
-        "portfolio_manager", "quality_gate",
+        "market",
+        "social",
+        "news",
+        "fundamentals",
+        "policy",
+        "hot_money",
+        "lockup",
+        "bull",
+        "bear",
+        "research_manager",
+        "trader",
+        "risk_aggressive",
+        "risk_neutral",
+        "risk_conservative",
+        "portfolio_manager",
+        "quality_gate",
     }

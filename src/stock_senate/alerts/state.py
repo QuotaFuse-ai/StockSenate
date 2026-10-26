@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 _FORMAT = "%Y-%m-%dT%H:%M:%S"
 _ACTIVE = {"triggered", "confirmed", "quiet"}
@@ -61,7 +62,7 @@ class AlertState:
         self._load()
 
     @classmethod
-    def from_config(cls, section: Mapping[str, Any], path: Path | str) -> "AlertState":
+    def from_config(cls, section: Mapping[str, Any], path: Path | str) -> AlertState:
         global_cfg = dict(section.get("global") or {})
         return cls(
             path,
@@ -82,9 +83,7 @@ class AlertState:
         entries = raw.get("rules") if isinstance(raw, dict) else None
         if isinstance(entries, dict):
             self.entries = {
-                str(key): dict(value)
-                for key, value in entries.items()
-                if isinstance(value, dict)
+                str(key): dict(value) for key, value in entries.items() if isinstance(value, dict)
             }
 
     def save(self) -> None:
@@ -176,9 +175,7 @@ class AlertState:
             pending = entry.get("pending") or []
             if not pending:
                 continue
-            released.extend(
-                {**dict(item), "released_at": _stamp(moment)} for item in pending
-            )
+            released.extend({**dict(item), "released_at": _stamp(moment)} for item in pending)
             entry["pending"] = []
             entry["last_status"] = "triggered"
             entry["last_fired_at"] = _stamp(moment)

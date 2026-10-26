@@ -236,7 +236,7 @@ class DataEnvelope(BaseModel):
     code: str
     data_as_of: date
     payload: dict
-    source: str              # tickhub_cn / tickhub_us / newsieve / json / text_doc / sql
+    source: str              # tickhub_cn / tickhub_us / json / text_doc / sql
     source_detail: str
     fetched_at: datetime
     freshness: str           # realtime / cached / archive
@@ -313,7 +313,7 @@ ssenate mcp http --port 8765
 | Python API | `SenateGraph` | `TradingAgentsGraph` 别名保留，`propagate` 签名不变 |
 | 配置目录 | `~/.stock_senate/` | 首次启动从 `~/.tradingagents/` 只读迁移 |
 | 环境变量 | `STOCKSENATE_*` | 兼容读取 `TRADINGAGENTS_*`，新前缀优先 |
-| MCP Server 名 | `stock-senate` | 与 `tickhub-cn` / `newsieve` 分开命名与鉴权 |
+| MCP Server 名 | `stock-senate` | 与 `tickhub-cn` 等底座 MCP 分开命名与鉴权 |
 | Docker 服务 | `ssenate` / `stocksenate-webui` | 与 `tickhub` / `tickhub-admin` 分离 |
 
 ---

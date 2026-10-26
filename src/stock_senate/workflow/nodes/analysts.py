@@ -8,7 +8,8 @@ whitelist). A custom role whose prompt file is missing is skipped and marked
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from stock_senate.roles.schemas import AnalystReport
 from stock_senate.workflow.context import RunContext
@@ -65,7 +66,9 @@ def reports_as_dicts(reports: list[AnalystReport]) -> list[dict[str, Any]]:
     return [report.model_dump() for report in reports]
 
 
-def aggregate_stance(reports: list[Mapping[str, Any]], weights: Mapping[str, float]) -> dict[str, Any]:
+def aggregate_stance(
+    reports: list[Mapping[str, Any]], weights: Mapping[str, float]
+) -> dict[str, Any]:
     """Weighted stance summary used by the research manager's prompt/context."""
     weight_total = 0.0
     score = 0.0

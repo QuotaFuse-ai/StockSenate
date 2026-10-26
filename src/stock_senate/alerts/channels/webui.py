@@ -7,9 +7,10 @@ so the alert loop keeps working when the UI is down.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from stock_senate.config.loader import home_dir
 
@@ -19,8 +20,9 @@ def alerts_log(home: Path | str | None = None) -> Path:
     return root / "alerts" / "alerts.jsonl"
 
 
-def send(event: Mapping[str, Any], config: Mapping[str, Any], *,
-         home: Path | str | None = None) -> dict[str, Any]:
+def send(
+    event: Mapping[str, Any], config: Mapping[str, Any], *, home: Path | str | None = None
+) -> dict[str, Any]:
     path = alerts_log(home)
     path.parent.mkdir(parents=True, exist_ok=True)
     record = dict(event)
@@ -43,7 +45,7 @@ def recent(limit: int = 50, *, home: Path | str | None = None) -> list[dict[str,
             rows.append(json.loads(line))
         except json.JSONDecodeError:
             continue
-    return rows[-max(1, int(limit)):]
+    return rows[-max(1, int(limit)) :]
 
 
 __all__ = ["alerts_log", "recent", "send"]

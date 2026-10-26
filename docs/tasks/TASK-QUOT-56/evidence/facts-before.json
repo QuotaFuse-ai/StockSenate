@@ -1,0 +1,73 @@
+{
+  "domains": [
+    {
+      "domain": "announcement",
+      "status": "ok",
+      "facts": 0
+    },
+    {
+      "domain": "dragon_tiger",
+      "status": "missing",
+      "facts": 0
+    },
+    {
+      "domain": "financial",
+      "status": "ok",
+      "facts": 0
+    },
+    {
+      "domain": "kline",
+      "status": "ok",
+      "facts": 5
+    },
+    {
+      "domain": "lockup_calendar",
+      "status": "ok",
+      "facts": 0
+    },
+    {
+      "domain": "money_flow",
+      "status": "ok",
+      "facts": 0
+    },
+    {
+      "domain": "news",
+      "status": "missing",
+      "facts": 0
+    },
+    {
+      "domain": "policy_feed",
+      "status": "missing",
+      "facts": 0
+    },
+    {
+      "domain": "quote",
+      "status": "missing",
+      "facts": 0
+    },
+    {
+      "domain": "research",
+      "status": "ok",
+      "facts": 2
+    },
+    {
+      "domain": "risk_event",
+      "status": "ok",
+      "facts": 0
+    },
+    {
+      "domain": "social_buzz",
+      "status": "missing",
+      "facts": 0
+    }
+  ],
+  "usable_domains": 7,
+  "domains_with_facts": 2,
+  "total_facts": 7,
+  "quality": {
+    "score": 23.3,
+    "low_quality": true,
+    "notes": "可用数据域 7/12，质量分 23.3。 缺失数据域：dragon_tiger、news、policy_feed、quote、social_buzz 低于阈值 70，标记为 low_quality 并提示人工复核。",
+    "partial": false
+  }
+}

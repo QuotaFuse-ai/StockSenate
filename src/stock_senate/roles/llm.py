@@ -15,8 +15,9 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from stock_senate.config.schema import ROLE_ALIASES, ROLE_LLM_KEYS
 from stock_senate.observability.logging import get_logger
@@ -95,7 +96,9 @@ def _truncate(value: Any, *, max_string: int = 4000, max_list: int = 40) -> Any:
     if isinstance(value, str):
         return value if len(value) <= max_string else value[:max_string] + "…"
     if isinstance(value, list):
-        return [_truncate(item, max_string=max_string, max_list=max_list) for item in value[:max_list]]
+        return [
+            _truncate(item, max_string=max_string, max_list=max_list) for item in value[:max_list]
+        ]
     if isinstance(value, dict):
         return {
             str(key): _truncate(item, max_string=max_string, max_list=max_list)
@@ -105,8 +108,16 @@ def _truncate(value: Any, *, max_string: int = 4000, max_list: int = 40) -> Any:
 
 
 class OpenAICompatibleClient:
-    def __init__(self, provider: str, *, model: str, base_url: str | None,
-                 api_key: str | None, timeout: float, max_tokens: int) -> None:
+    def __init__(
+        self,
+        provider: str,
+        *,
+        model: str,
+        base_url: str | None,
+        api_key: str | None,
+        timeout: float,
+        max_tokens: int,
+    ) -> None:
         self.provider = provider
         self.model = model
         self.base_url = base_url or _DEFAULT_BASE_URLS.get(provider, "")
@@ -126,12 +137,17 @@ class OpenAICompatibleClient:
             ) from exc
         if not self.base_url:
             raise LLMConfigError(
-                f"provider {self.provider!r} 没有默认 base_url，请在 llm_config.toml 配置 backend_url"
+                f"provider {self.provider!r} 没有默认 base_url，"
+                "请在 llm_config.toml 配置 backend_url"
             )
         if not self.api_key:
-            names = ["STOCKSENATE_LLM_API_KEY", _PROVIDER_KEY_ENV.get(self.provider, "OPENAI_API_KEY")]
+            names = [
+                "STOCKSENATE_LLM_API_KEY",
+                _PROVIDER_KEY_ENV.get(self.provider, "OPENAI_API_KEY"),
+            ]
             raise LLMConfigError(
-                f"provider {self.provider!r} 缺少 API key；请设置 {' 或 '.join(dict.fromkeys(names))}"
+                f"provider {self.provider!r} 缺少 API key；"
+                f"请设置 {' 或 '.join(dict.fromkeys(names))}"
             )
         self._client = openai.OpenAI(
             base_url=self.base_url,
@@ -141,7 +157,9 @@ class OpenAICompatibleClient:
         )
         return self._client
 
-    def complete(self, *, system: str, user: str, json_mode: bool = True) -> tuple[str, dict[str, int]]:
+    def complete(
+        self, *, system: str, user: str, json_mode: bool = True
+    ) -> tuple[str, dict[str, int]]:
         client = self._ensure()
         kwargs: dict[str, Any] = {
             "model": self.model,
@@ -190,7 +208,9 @@ class AnthropicClient:
         self._client = anthropic.Anthropic(api_key=self.api_key, timeout=self.timeout)
         return self._client
 
-    def complete(self, *, system: str, user: str, json_mode: bool = True) -> tuple[str, dict[str, int]]:
+    def complete(
+        self, *, system: str, user: str, json_mode: bool = True
+    ) -> tuple[str, dict[str, int]]:
         client = self._ensure()
         try:
             response = client.messages.create(
@@ -218,11 +238,13 @@ class RoleLLMResolver:
     """Resolve a role to a model, then to validated structured output."""
 
     def __init__(self, config: Mapping[str, Any], *, budget: Budget | None = None) -> None:
-        llm_section = ((config or {}).get("llm_config") or {})
+        llm_section = (config or {}).get("llm_config") or {}
         self.llm = dict(llm_section.get("llm") or {})
         self.role_llms = dict(self.llm.get("role_llms") or {})
         self.provider = str(self.llm.get("llm_provider") or "offline")
-        self.default_model = str(self.llm.get("deep_think_llm") or self.llm.get("quick_think_llm") or "offline")
+        self.default_model = str(
+            self.llm.get("deep_think_llm") or self.llm.get("quick_think_llm") or "offline"
+        )
         self.max_tokens = int(self.llm.get("max_tokens", 4096))
         self.timeout = float(self.llm.get("llm_timeout", 150))
         self.transport_retries = max(0, int(self.llm.get("llm_max_retries", 3)))
@@ -267,7 +289,10 @@ class RoleLLMResolver:
         api_key = self._api_key(provider)
         if provider in _ANTHROPIC_PROVIDERS:
             client: Any = AnthropicClient(
-                model=target.model, api_key=api_key, timeout=self.timeout, max_tokens=self.max_tokens
+                model=target.model,
+                api_key=api_key,
+                timeout=self.timeout,
+                max_tokens=self.max_tokens,
             )
         else:
             client = OpenAICompatibleClient(
@@ -312,8 +337,12 @@ class RoleLLMResolver:
         if target.provider.lower() == "offline":
             payload = offline.generate(schema_name, context)
             self.calls.append({"role": target.role, "provider": "offline", "model": target.model})
-            return payload, {"provider": "offline", "model": target.model,
-                             "input_tokens": 0, "output_tokens": 0}
+            return payload, {
+                "provider": "offline",
+                "model": target.model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+            }
 
         client = self.client(target)
         user = self._user_prompt(schema_name, context)
@@ -331,7 +360,11 @@ class RoleLLMResolver:
                 }
             )
             try:
-                return _json_object(text), {"provider": target.provider, "model": target.model, **tokens}
+                return _json_object(text), {
+                    "provider": target.provider,
+                    "model": target.model,
+                    **tokens,
+                }
             except LLMResponseInvalid as exc:
                 last_error = exc
                 get_logger("llm").warning(

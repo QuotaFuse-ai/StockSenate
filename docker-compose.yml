@@ -16,7 +16,6 @@ services:
       STOCKSENATE_WEBUI_PORT: "8788"
       STOCKSENATE_LOG_LEVEL: INFO
       TICKHUB_CN_MCP_URL: http://host.docker.internal:8000/mcp
-      NEWSIEVE_MCP_URL: http://host.docker.internal:8002/mcp
     env_file:
       - path: .env
         required: false
@@ -29,7 +28,7 @@ services:
       - stocksenate-config:/app/config-dir
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8788/_stcore/health"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8788/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -60,6 +59,12 @@ services:
       - stocksenate-data:/app/data
       - stocksenate-config:/app/config-dir
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
 volumes:
   stocksenate-data:

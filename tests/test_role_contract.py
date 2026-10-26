@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-
 from cli_support import CONFIG, run_cli
+
 from stock_senate.config.loader import load_config
 from stock_senate.config.schema import ROLE_ALIASES, ROLE_LLM_KEYS
 from stock_senate.roles.registry import RoleError, RoleRegistry
@@ -77,8 +77,12 @@ def test_seven_enabled_analysts_and_five_free_custom_seats(repo_registry: RoleRe
 
 @pytest.mark.parametrize(
     ("alias", "canonical"),
-    [("technical", "market"), ("basic", "fundamentals"),
-     ("sentiment", "social"), ("unlock", "lockup")],
+    [
+        ("technical", "market"),
+        ("basic", "fundamentals"),
+        ("sentiment", "social"),
+        ("unlock", "lockup"),
+    ],
 )
 def test_aliases_resolve_to_the_canonical_role(
     repo_registry: RoleRegistry, alias: str, canonical: str
@@ -217,9 +221,7 @@ def test_temporary_overrides_never_mutate_the_source(repo_registry: RoleRegistry
 
 def test_write_tools_must_stay_denied() -> None:
     with pytest.raises(RoleError, match="不做实盘交易"):
-        registry_for(
-            builtin_roles(), tools={"enforce": True, "deny_write_tools": False}
-        )
+        registry_for(builtin_roles(), tools={"enforce": True, "deny_write_tools": False})
 
 
 def test_role_without_kind_is_rejected() -> None:
@@ -234,11 +236,6 @@ def test_role_without_kind_is_rejected() -> None:
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="defect QUOT-51-06: `role show technical` looks up the raw TOML table and "
-    "exits 3; cli-reference promises aliases are normalised for role commands",
-)
 def test_cli_role_show_accepts_an_alias() -> None:
     result = run_cli("role", "show", "technical", "--config", str(CONFIG), "--output", "json")
 

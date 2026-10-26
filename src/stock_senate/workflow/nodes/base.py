@@ -11,8 +11,9 @@ silent hole in the report.
 from __future__ import annotations
 
 import copy
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
@@ -66,7 +67,11 @@ def load_system_prompt(spec: RoleSpec, config: Mapping[str, Any]) -> str:
 
 
 def _fallback_payload(spec: RoleSpec, context: Mapping[str, Any], reason: str) -> dict[str, Any]:
-    base: dict[str, Any] = {"role": spec.key, "partial": True, "notes": f"角色输出不可用：{reason}"[:500]}
+    base: dict[str, Any] = {
+        "role": spec.key,
+        "partial": True,
+        "notes": f"角色输出不可用：{reason}"[:500],
+    }
     if spec.output_schema == "AnalystReport":
         base.update(
             display_name=spec.display_name,
@@ -79,11 +84,21 @@ def _fallback_payload(spec: RoleSpec, context: Mapping[str, Any], reason: str) -
             data_gaps=[reason[:300]],
         )
     elif spec.output_schema == "ResearchArgument":
-        base.update(side=str(context.get("side") or "bull"), points=[], rebuttals=[], confidence=0.0)
+        base.update(
+            side=str(context.get("side") or "bull"), points=[], rebuttals=[], confidence=0.0
+        )
     elif spec.output_schema == "ResearchVerdict":
-        base.update(stance="unknown", confidence=0.0, rationale=[reason[:300]], unresolved=[reason[:200]])
+        base.update(
+            stance="unknown", confidence=0.0, rationale=[reason[:300]], unresolved=[reason[:200]]
+        )
     elif spec.output_schema == "TradePlan":
-        base.update(direction="unknown", horizon="unknown", rationale=[reason[:300]], risks=[], confidence=0.0)
+        base.update(
+            direction="unknown",
+            horizon="unknown",
+            rationale=[reason[:300]],
+            risks=[],
+            confidence=0.0,
+        )
     elif spec.output_schema == "RiskArgument":
         base.update(
             side=str(context.get("side") or "neutral"),
@@ -106,7 +121,9 @@ def _fallback_payload(spec: RoleSpec, context: Mapping[str, Any], reason: str) -
     return base
 
 
-def _coerce(payload: Any, schema: type[BaseModel], spec: RoleSpec, context: Mapping[str, Any]) -> dict[str, Any]:
+def _coerce(
+    payload: Any, schema: type[BaseModel], spec: RoleSpec, context: Mapping[str, Any]
+) -> dict[str, Any]:
     if not isinstance(payload, Mapping):
         raise RoleOutputError("模型输出不是 JSON 对象")
     allowed = set(schema.model_fields)
@@ -164,12 +181,15 @@ def run_role(ctx: RunContext, role: str, context: Mapping[str, Any]) -> BaseMode
         cleaned = _coerce(worked, schema, spec, context)
         model = schema.model_validate(cleaned)
     except (ValidationError, RoleOutputError) as exc:
-        fallback = schema.model_validate(_fallback_payload(spec, context, f"结构化输出校验失败：{exc}"))
+        fallback = schema.model_validate(
+            _fallback_payload(spec, context, f"结构化输出校验失败：{exc}")
+        )
         ctx.skipped.append({"role": spec.key, "reason": "结构化输出校验失败"})
         return fallback
     if changed:
         note = "；已移除可执行价位或指令表述"
-        model = model.model_copy(update={"notes": (model.notes + note).strip("；")})
+        existing = str(getattr(model, "notes", "") or "")
+        model = model.model_copy(update={"notes": (existing + note).strip("；")})
     return model
 
 

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any
 
 from stock_senate.data.envelope import DataEnvelope
 from stock_senate.data.router import DataAccessLayer
@@ -12,7 +13,6 @@ from stock_senate.roles.llm import RoleLLMResolver
 from stock_senate.roles.registry import RoleRegistry
 from stock_senate.roles.tool_gate import ToolGate
 from stock_senate.workflow.budget import Budget
-
 
 HitlHandler = Callable[[str, Mapping[str, Any]], Mapping[str, Any]]
 

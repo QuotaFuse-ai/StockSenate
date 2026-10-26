@@ -242,4 +242,10 @@ def run_risk_debate(
     )
 
 
-__all__ = ["DebateResult", "RISK_SIDES", "RiskDebateResult", "run_bull_bear_debate", "run_risk_debate"]
+__all__ = [
+    "DebateResult",
+    "RISK_SIDES",
+    "RiskDebateResult",
+    "run_bull_bear_debate",
+    "run_risk_debate",
+]

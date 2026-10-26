@@ -1,0 +1,21 @@
+{
+  "status": "degraded",
+  "partial": true,
+  "low_quality": true,
+  "quality_score": 73.3,
+  "rating": "overweight",
+  "quality": null,
+  "data": {
+    "status": "degraded",
+    "total": 12,
+    "missing": [
+      "dragon_tiger",
+      "news",
+      "policy_feed",
+      "quote",
+      "social_buzz"
+    ],
+    "degraded": [],
+    "ok": 7
+  }
+}

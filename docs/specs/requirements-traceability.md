@@ -12,6 +12,8 @@
 
 > 更新记录：2026-10-26 按 M0–M3 交付结果刷新状态列，验收证据与剩余项见 `docs/tasks/TASK-QUOT-50/README.md`；WebUI 以 Starlette 交付的偏离见 DEC-008。
 
+> 更新记录：2026-10-26 QUOT-56 修复后刷新：compose 健康检查路径、事实抽取与覆盖计分、退出码 0/2/3/4/7/8、安装 extras。Newsieve 移除见 DEC-009。
+
 ---
 
 ## 一、项目基础信息（v1.1/v1.2 §1）
@@ -21,7 +23,7 @@
 | 1.1 | 定位：只做投研分析 + 回测推演，不做实盘、不输出自动交易指令 | `README.md`、`docs/specs/PRD.md` §2.2、`config/output_template.toml` | 文档 / 报告页脚 | 报告与 README 均含免责声明；代码中无下单接口 | P0 | 已实现（`execution=false`、报告/MCP 免责声明；无下单代码） |
 | 1.1 | 7 角色 + 多空辩论 + 研究经理 + 交易员 + 三档风险 + 投资经理终审完整保留 | `src/stock_senate/workflow/`、`config/agent_roles.toml` | `ssenate analyze` | 拓扑单测断言 6 个阶段与顺序 | P0 | 已实现（`test_webui_parity`、`test_mcp` 跑通全链路） |
 | 1.1 | CLI / Streamlit WebUI / Python API / 报告 / checkpoint 完整保留 | `src/stock_senate/cli.py`、`webui/`、`graph/senate_graph.py` | 全部入口 | 三处入口对同一 run 结果一致 | P0 | 骨架（CLI/API/报告已实现；WebUI 以 Starlette 交付，checkpoint 恢复未实现） |
-| 1.1 | 数据采集统一交给 TickHub/Newsieve，不重复实现采集、缓存、代理池、降级 | `src/stock_senate/data/`、`config/data_source.toml` | `ssenate analyze` | 代码中无直连东财/巨潮/通达信；网络层只经 provider | P0 | 已实现（provider 层统一取数，无直连采集代码） |
+| 1.1 | 数据采集统一交给 TickHub，不重复实现采集、缓存、代理池、降级 | `src/stock_senate/data/`、`config/data_source.toml` | `ssenate analyze` | 代码中无直连东财/巨潮/通达信；网络层只经 provider | P0 | 已实现（provider 层统一取数，无直连采集代码） |
 | 1.2 | 命名映射：包 `stocksenate`、模块 `stock_senate`、CLI `ssenate`、入口 `stock_senate.cli:main` | `pyproject.toml` | `ssenate` | `pip install -e .` 后 `ssenate --help` | P0 | 已实现 |
 | 1.2 | 旧 CLI `tradingagents` 保留并打印弃用警告 | `pyproject.toml` `[project.scripts]`、`cli.legacy_main` | `tradingagents` | 运行后 stderr 含弃用提示 | P0 | 已实现 |
 | 1.2 | 旧包名/Python 包 shim 过渡 | 迁移说明 | — | `docs/decisions/DEC-001` 记录取舍：不发布 shim，改为安装期提示 | P1 | 待实现 |
@@ -76,7 +78,7 @@
 | 5.7 | 30~50 次调用 → 增量分析 | `workflow/incremental.py` | 配置 / analyze | 二次分析 token 显著下降 | P1 | 待实现（无增量分析模块） |
 | 5.8 | 配置分散 → 统一 toml + Schema 校验 | `config/*.toml`、`config/schema.py` | `ssenate config validate` | 错误定位到文件与键 | P0 | 已实现 |
 | 5.9 | 日志弱 → 结构化日志（stdout/stderr 分离、脱敏、多 sink） | `observability/logging.py` | 全部入口 | stdout 无日志；API key 被脱敏 | P0 | 已实现（`observability/logging.py`；stdout 纯净、字段脱敏） |
-| 5.10 | 无 CI → 补全 CI | `.github/workflows/ci.yml` | CI | lint + type + test + audit 全绿 | P0 | 已实现（工作流就绪；首次推送后确认全绿） |
+| 5.10 | 无 CI → 补全 CI | `.github/workflows/ci.yml` | CI | lint + type + test + audit 全绿 | P0 | 进行中（QUOT-56 已本机复现 7 个红项并修好：ruff/mypy 清零、`pytest` 186 通过、build+twine 通过、audit 改用 `pip-audit --skip-editable`；CI 侧待推送后确认） |
 | 5.11 | 无 lock file → 依赖锁定 | `uv.lock` | 安装 | CI 用 `uv sync --frozen` | P1 | 待实现（仓库无 `uv.lock`） |
 | 5.12 | 英文文档不一致 → 修复 | `README.md`、`docs/` | 文档 | 中英文命令与配置键一致 | P2 | 已实现 |
 
@@ -94,7 +96,7 @@
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
 | 7.1 | 不在本组件实现采集/缓存/代理/降级 | `README.md` §职责边界 | — | 代码扫描无采集实现 | P0 | 已实现 |
-| 7.2 | Provider：TickHub-CN / TickHub-US / Newsieve / JSON / TextDoc / SQL / Composite | `data/providers/` | `data_source.toml` | 每个 provider 有契约测试 | P0 | 已实现（七类 provider 齐全；契约测试待补） |
+| 7.2 | Provider：TickHub-CN / TickHub-US / JSON / TextDoc / SQL / Composite | `data/providers/` | `data_source.toml` | 每个 provider 有契约测试 | P0 | 已实现（六类 provider 齐全；Newsieve 已移除，资讯三域由 TickHub-CN 承担） |
 | 7.2 | MCP stdio 与本地 import 双通道 | `data/providers/tickhub.py` | 配置 | 两种通道结果一致 | P0 | 已实现（`data/providers/tickhub.py`） |
 | 7.3 | `DataEnvelope` 九字段：domain/code/data_as_of/payload/source/source_detail/fetched_at/freshness/confidence/data_source_status | `data/envelope.py` | Python API / MCP | 字段与枚举单测；缺字段构造失败 | P0 | 已实现（`data/envelope.py`） |
 | 7.4 | 四模式 `stockdata/local/hybrid/priority` + 按域优先级 | `data/router.py` | 配置 / analyze | 每模式一条集成测试 | P0 | 已实现（`local` 集成测试；其余模式单测待补） |
@@ -128,7 +130,7 @@
 | 9.1 | 短期记忆用图状态；长期反思入 PGVector；同标的检索注入 | `workflow/memory.py`、`observability/reflection.py` | analyze | 可关闭；不跨标的污染 | P1 | 待实现（无 memory 模块） |
 | 9.2 | 防 Prompt 注入清洗层 + 合规过滤 | `data/sanitize.py`、`workflow/guardrails.py` | 全部输入 | 注入样本不改变系统行为 | P0 | 已实现（`data/sanitize.py`；注入样本测试待补） |
 | 9.3 | HITL 两个强制挂起点，支持同意/驳回/修改/超时 | `workflow/hitl.py` | analyze / WebUI | 四种动作各一测；自动放行留痕 | P0 | 已实现（`workflow/hitl.py`） |
-| 9.4 | LLM-as-a-Judge 三维评分，<70 标 `low_quality` | `workflow/judge.py` | analyze / 报告 | 低分报告被标记且 WebUI 高亮 | P1 | 已实现（`workflow/nodes/quality.py` 三维质量门；评分为规则式，非 LLM Judge） |
+| 9.4 | LLM-as-a-Judge 三维评分，<70 标 `low_quality` | `workflow/judge.py` | analyze / 报告 | 低分报告被标记且 WebUI 高亮 | P1 | 已实现（`workflow/nodes/quality.py` 三维质量门；评分为规则式，非 LLM Judge；数据覆盖按事实数计分，0 事实域不计覆盖） |
 | 9.5 | Map-Reduce 上下文压缩 | `workflow/compress.py` | analyze | 超阈值触发；引用不丢 | P1 | 待实现（无 compress 模块） |
 | 9.6 | OpenTelemetry / Langfuse 追踪 + trace_id | `observability/tracing.py` | 全部入口 | 一次运行的日志/span/用量同 id | P1 | 待实现（trace_id 已贯穿，未接 OTel/Langfuse） |
 
@@ -150,7 +152,7 @@
 | 11 | `analyze --disable/--enable/--weight` | `cli.analyze` | CLI | 三个参数生效并在报告留痕 | P0 | 已实现（`test_cli`） |
 | 11 | Python API `SenateGraph.propagate(code, date)` | `graph/senate_graph.py` | Python API | 返回 `(final_state, decision)` | P0 | 已实现（`test_contracts`） |
 | 11 | json/table/csv 走 stdout，日志走 stderr | `cli._emit`、`observability/logging.py` | CLI | 管道重定向测试 | P0 | 已实现（`test_alerts`/`test_mcp`） |
-| 11 | 退出码 0/2/3/4/7/8 | `cli.py` 常量 | CLI | 六种场景各一测 | P0 | 已实现 |
+| 11 | 退出码 0/2/3/4/7/8 | `cli.py` 常量 | CLI | 六种场景各一测 | P0 | 已实现（QUOT-56：六种场景实测，测试零 xfail） |
 
 ## 十二、完整回测引擎（§12）
 
@@ -208,8 +210,8 @@
 
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
-| 17 | `pip install stocksenate`，Python ≥3.11 | `pyproject.toml` | 安装 | 干净环境安装成功 | P0 | 已实现 |
-| 17 | extras `[stockdata] [backtest] [mcp] [webui] [all]` | `pyproject.toml` | 安装 | 每个 extra 单独可装 | P0 | 已实现 |
+| 17 | `pip install stocksenate`，Python ≥3.11 | `pyproject.toml` | 安装 | 干净环境安装成功 | P0 | 已实现（QUOT-56：干净 venv `pip install .` 后 `ssenate --version` / 离线 `analyze` 通过） |
+| 17 | extras `[stockdata] [mcp] [webui] [all]` | `pyproject.toml` | 安装 | 每个 extra 单独可装 | P0 | 已实现（`[backtest]` 已移除：回测无 pandas/numpy import，见 DEC-009） |
 | 17 | 不提供 `[google]`，httpx 冲突解法写进文档 | `pyproject.toml`、`README.md`、DEC-007 | 文档 | 依赖树无冲突 | P0 | 已实现 |
 | 17 | `python -m build` + `twine upload` | `.github/workflows/release.yml` | CI | `twine check` 通过 | P1 | 待实现（无 release workflow） |
 | 17 | NOTICE / LICENSE / Apache-2.0 归属 | `LICENSE`、`NOTICE` | 仓库 | 发布包内含两文件 | P0 | 已实现 |
@@ -220,7 +222,7 @@
 |---|---|---|---|---|---|---|
 | 18.1 | 测试类型：单元/契约/集成/E2E/回归/安全 | `tests/`、`.github/workflows/ci.yml` | CI | 六类目录与用例存在 | P0 | 已实现（单元/契约/集成/安全边界；浏览器 E2E 未跑） |
 | 18.2 | 18 项新增能力逐项验收 | 本文件 F-01…F-31 | — | 逐项打勾 | P0 | 进行中 |
-| 18.3 | 部署：pip / Docker / compose | `Dockerfile`、`docker-compose.yml` | 部署 | compose 两个服务可起 | P2 | 骨架（文件就绪；未构建验证） |
+| 18.3 | 部署：pip / Docker / compose | `Dockerfile`、`docker-compose.yml` | 部署 | compose 两个服务可起 | P2 | 骨架（健康检查已对齐 `/healthz`，mcp 依赖 webui `service_healthy`；本机无 Docker，未做真实 `up` 验证） |
 | 18.4 | 边界约束：不实盘、不产出价位、不泄露密钥 | 全仓库 | — | 安全工程师复核清单 | P0 | 已实现（`execution=false`、无价位字段、日志脱敏） |
 | 18.5 | 里程碑 M0–M4 与退出标准 | `PRD.md` §8 | — | 每个里程碑有验收脚本 | P0 | 已实现（M0–M3 有自动化验收；M4 未开始） |
 

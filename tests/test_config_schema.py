@@ -90,13 +90,13 @@ def test_twelve_analysts_are_accepted() -> None:
 def test_sixth_custom_analyst_is_rejected(tmp_path: Path) -> None:
     directory = copy_config(tmp_path)
     extra = "".join(
-        f'\n[roles.custom_{index}]\n'
+        f"\n[roles.custom_{index}]\n"
         f'display_name = "自定义{index}"\n'
         f'kind = "analyst"\n'
         f'prompt = "prompts/analysts/custom_{index}.md"\n'
         f'tools = ["news_search"]\n'
         f'output_schema = "AnalystReport"\n'
-        f'enabled = true\n'
+        f"enabled = true\n"
         for index in range(6)
     )
     append_to(directory / "agent_roles.toml", extra)

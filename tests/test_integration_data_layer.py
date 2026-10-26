@@ -13,7 +13,7 @@ import pytest
 from stock_senate.data.envelope import DataEnvelope, SourceStatus, date_only
 from stock_senate.data.providers import Provider, ProviderError, ProviderNotAvailable
 from stock_senate.data.providers.base import envelope_from_payload
-from stock_senate.data.router import DataAccessLayer, MODES, summarize
+from stock_senate.data.router import MODES, DataAccessLayer, summarize
 
 DAY = "2026-01-28"
 
@@ -85,8 +85,9 @@ def layer(
 def test_local_mode_never_selects_a_remote_provider() -> None:
     remote = FakeProvider("remote", kind="mcp")
     local = FakeProvider("local")
-    access = layer({"remote": remote, "local": local}, mode="local",
-                   routing={"kline": ["remote", "local"]})
+    access = layer(
+        {"remote": remote, "local": local}, mode="local", routing={"kline": ["remote", "local"]}
+    )
 
     assert access.candidates("kline") == ["local"]
     envelope = access.fetch("kline", "600519")
@@ -98,8 +99,9 @@ def test_local_mode_never_selects_a_remote_provider() -> None:
 def test_stockdata_mode_never_selects_a_local_provider() -> None:
     remote = FakeProvider("remote", kind="mcp")
     local = FakeProvider("local")
-    access = layer({"remote": remote, "local": local}, mode="stockdata",
-                   routing={"kline": ["local", "remote"]})
+    access = layer(
+        {"remote": remote, "local": local}, mode="stockdata", routing={"kline": ["local", "remote"]}
+    )
 
     assert access.candidates("kline") == ["remote"]
 
@@ -107,8 +109,9 @@ def test_stockdata_mode_never_selects_a_local_provider() -> None:
 def test_hybrid_mode_tries_local_before_remote() -> None:
     remote = FakeProvider("remote", kind="mcp")
     local = FakeProvider("local")
-    access = layer({"remote": remote, "local": local}, mode="hybrid",
-                   routing={"kline": ["remote", "local"]})
+    access = layer(
+        {"remote": remote, "local": local}, mode="hybrid", routing={"kline": ["remote", "local"]}
+    )
 
     assert access.candidates("kline") == ["local", "remote"]
 
@@ -116,8 +119,9 @@ def test_hybrid_mode_tries_local_before_remote() -> None:
 def test_priority_mode_keeps_the_declared_order() -> None:
     remote = FakeProvider("remote", kind="mcp")
     local = FakeProvider("local")
-    access = layer({"remote": remote, "local": local}, mode="priority",
-                   routing={"kline": ["remote", "local"]})
+    access = layer(
+        {"remote": remote, "local": local}, mode="priority", routing={"kline": ["remote", "local"]}
+    )
 
     assert access.candidates("kline") == ["remote", "local"]
 
@@ -141,8 +145,7 @@ def test_all_documented_modes_are_accepted() -> None:
 def test_fallback_records_the_skipped_provider() -> None:
     broken = FakeProvider("broken", error=ProviderNotAvailable("archive missing"))
     healthy = FakeProvider("healthy")
-    access = layer({"broken": broken, "healthy": healthy},
-                   routing={"kline": ["broken", "healthy"]})
+    access = layer({"broken": broken, "healthy": healthy}, routing={"kline": ["broken", "healthy"]})
 
     envelope = access.fetch("kline", "600519")
 
@@ -162,9 +165,11 @@ def test_fallback_records_the_skipped_provider() -> None:
 def test_allow_fallback_false_stops_after_the_first_candidate() -> None:
     broken = FakeProvider("broken", error=ProviderError("bad payload"))
     healthy = FakeProvider("healthy")
-    access = layer({"broken": broken, "healthy": healthy},
-                   routing={"kline": ["broken", "healthy"]},
-                   allow_fallback=False)
+    access = layer(
+        {"broken": broken, "healthy": healthy},
+        routing={"kline": ["broken", "healthy"]},
+        allow_fallback=False,
+    )
 
     envelope = access.fetch("kline", "600519")
 
@@ -177,8 +182,7 @@ def test_allow_fallback_false_stops_after_the_first_candidate() -> None:
 def test_every_provider_failing_yields_a_missing_envelope_not_an_exception() -> None:
     first = FakeProvider("first", error=ProviderNotAvailable("no archive"))
     second = FakeProvider("second", error=ProviderError("malformed json"))
-    access = layer({"first": first, "second": second},
-                   routing={"kline": ["first", "second"]})
+    access = layer({"first": first, "second": second}, routing={"kline": ["first", "second"]})
 
     envelope = access.fetch("kline", "600519")
 
@@ -191,8 +195,7 @@ def test_every_provider_failing_yields_a_missing_envelope_not_an_exception() -> 
 def test_provider_returning_a_missing_envelope_is_rejected() -> None:
     empty = FakeProvider("empty", status="missing")
     healthy = FakeProvider("healthy")
-    access = layer({"empty": empty, "healthy": healthy},
-                   routing={"kline": ["empty", "healthy"]})
+    access = layer({"empty": empty, "healthy": healthy}, routing={"kline": ["empty", "healthy"]})
 
     envelope = access.fetch("kline", "600519")
 
@@ -223,8 +226,9 @@ def test_forbid_llm_fill_must_be_true() -> None:
 def test_model_filled_payload_is_rejected() -> None:
     invented = FakeProvider("invented", payload={"close": 1.23, "llm_fill": True})
     healthy = FakeProvider("healthy", payload={"close": 1.23})
-    access = layer({"invented": invented, "healthy": healthy},
-                   routing={"kline": ["invented", "healthy"]})
+    access = layer(
+        {"invented": invented, "healthy": healthy}, routing={"kline": ["invented", "healthy"]}
+    )
 
     envelope = access.fetch("kline", "600519")
 
@@ -255,8 +259,9 @@ def test_nested_model_fill_marker_is_rejected() -> None:
 def test_envelope_dated_after_the_analysis_date_is_rejected() -> None:
     future = FakeProvider("future", data_as_of="2026-02-10")
     healthy = FakeProvider("healthy", data_as_of=DAY)
-    access = layer({"future": future, "healthy": healthy},
-                   routing={"kline": ["future", "healthy"]}, as_of=DAY)
+    access = layer(
+        {"future": future, "healthy": healthy}, routing={"kline": ["future", "healthy"]}, as_of=DAY
+    )
 
     envelope = access.fetch("kline", "600519")
 
@@ -266,8 +271,9 @@ def test_envelope_dated_after_the_analysis_date_is_rejected() -> None:
 
 def test_lookahead_rejection_can_be_disabled_by_config() -> None:
     future = FakeProvider("future", data_as_of="2026-02-10")
-    access = layer({"future": future}, routing={"kline": ["future"]},
-                   enforce_no_lookahead=False, as_of=DAY)
+    access = layer(
+        {"future": future}, routing={"kline": ["future"]}, enforce_no_lookahead=False, as_of=DAY
+    )
 
     assert access.fetch("kline", "600519").data_source_status is SourceStatus.OK
 
@@ -285,7 +291,7 @@ def test_local_json_provider_reads_the_newest_archive_not_after_as_of(tmp_path) 
         path = root / "kline" / "600519" / f"{day}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            '{"data": {"code": "600519", "klines": []}, "data_as_of": "%s"}' % day,
+            f'{{"data": {{"code": "600519", "klines": []}}, "data_as_of": "{day}"}}',
             encoding="utf-8",
         )
     provider = LocalJsonProvider(
@@ -336,23 +342,29 @@ def _envelope(domain: str, status: SourceStatus) -> DataEnvelope:
 
 
 def test_summarize_reports_ok_degraded_and_missing() -> None:
-    ok = summarize({
-        "kline": _envelope("kline", SourceStatus.OK),
-        "news": _envelope("news", SourceStatus.OK),
-    })
+    ok = summarize(
+        {
+            "kline": _envelope("kline", SourceStatus.OK),
+            "news": _envelope("news", SourceStatus.OK),
+        }
+    )
     assert ok == {"status": "ok", "total": 2, "missing": [], "degraded": [], "ok": 2}
 
-    degraded = summarize({
-        "kline": _envelope("kline", SourceStatus.OK),
-        "news": _envelope("news", SourceStatus.DEGRADED),
-    })
+    degraded = summarize(
+        {
+            "kline": _envelope("kline", SourceStatus.OK),
+            "news": _envelope("news", SourceStatus.DEGRADED),
+        }
+    )
     assert degraded["status"] == "degraded"
     assert degraded["degraded"] == ["news"]
 
-    missing = summarize({
-        "kline": _envelope("kline", SourceStatus.MISSING),
-        "news": _envelope("news", SourceStatus.DEGRADED),
-    })
+    missing = summarize(
+        {
+            "kline": _envelope("kline", SourceStatus.MISSING),
+            "news": _envelope("news", SourceStatus.DEGRADED),
+        }
+    )
     assert missing["status"] == "degraded"
     assert missing["missing"] == ["kline"]
 

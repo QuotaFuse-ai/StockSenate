@@ -13,7 +13,8 @@ reading the report can tell a real approval from a timeout.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 from stock_senate.data.envelope import now_iso
 
@@ -81,7 +82,7 @@ class HitlReviewer:
                 record[key] = answer[key]
         return record
 
-    def summary(self, traces: list[Mapping[str, Any]]) -> dict[str, Any]:
+    def summary(self, traces: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         return {
             "enabled": self.enabled,
             "checkpoints": list(self.checkpoints),
@@ -90,7 +91,7 @@ class HitlReviewer:
         }
 
 
-def hitl_blocked(traces: list[Mapping[str, Any]]) -> bool:
+def hitl_blocked(traces: Sequence[Mapping[str, Any]]) -> bool:
     return any(item.get("decision") in {"rejected", "abort"} for item in traces)
 
 

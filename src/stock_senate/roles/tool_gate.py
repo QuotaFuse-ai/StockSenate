@@ -8,7 +8,7 @@ granted to any role.
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from stock_senate.data.providers.base import TOOL_TO_DOMAIN, tool_to_domain
 from stock_senate.roles.registry import RoleRegistry, RoleSpec
@@ -74,17 +74,13 @@ class ToolGate:
                 raise ToolDenied(f"未知数据工具 {name!r}")
             return tool_to_domain(name)
         if name not in spec.tools:
-            raise ToolDenied(
-                f"角色 {role} 未获得工具 {name!r}；白名单为 {list(spec.tools)}"
-            )
+            raise ToolDenied(f"角色 {role} 未获得工具 {name!r}；白名单为 {list(spec.tools)}")
         return tool_to_domain(name)
 
     def check_domain(self, role: str, domain: str) -> None:
         allowed = self.domains(role)
         if domain not in allowed:
-            raise ToolDenied(
-                f"角色 {role} 不得读取 {domain!r}；允许的域为 {allowed}"
-            )
+            raise ToolDenied(f"角色 {role} 不得读取 {domain!r}；允许的域为 {allowed}")
 
 
 __all__ = ["ToolDenied", "ToolGate", "WRITE_TOOLS"]

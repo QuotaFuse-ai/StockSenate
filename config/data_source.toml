@@ -1,5 +1,5 @@
 # StockSenate 数据源路由
-# 本组件不实现采集、缓存、代理池与降级：那是 TickHub 底座 / Newsieve 的职责。
+# 本组件不实现采集、缓存、代理池与降级：那是 TickHub 底座的职责。
 
 [global]
 # stockdata | local | hybrid | priority
@@ -18,7 +18,9 @@ command = "th-cn"
 transport = "stdio"
 # 本地已装 tickhub_cn 时优先直连 import，避免子进程开销。
 prefer_local_import = true
-domains = ["kline", "quote", "financial", "announcement", "research", "money_flow", "dragon_tiger", "lockup_calendar", "risk_event"]
+domains = ["kline", "quote", "financial", "announcement", "research", "money_flow", "dragon_tiger", "lockup_calendar", "risk_event", "news", "social_buzz", "policy_feed"]
+# 公告/风险事件为半静态域：报告期之间可能 60 天无新公告，窗口放宽到 180 天。
+announcement_lookback_days = 180
 
 [providers.tickhub_us]
 kind = "mcp"
@@ -26,13 +28,6 @@ package = "tickhub-us"
 command = "th-us"
 transport = "stdio"
 domains = ["kline", "quote", "financial", "announcement", "risk_event"]
-
-[providers.newsieve]
-kind = "mcp"
-package = "newsieve"
-command = "nsv"
-transport = "stdio"
-domains = ["news", "social_buzz", "policy_feed"]
 
 [providers.local_json]
 kind = "json_file"
@@ -64,9 +59,9 @@ financial = ["tickhub_cn", "local_json", "sql"]
 announcement = ["tickhub_cn", "local_json"]
 research = ["tickhub_cn", "text_docs", "local_json"]
 risk_event = ["tickhub_cn", "local_json"]
-news = ["newsieve"]
-social_buzz = ["newsieve"]
-policy_feed = ["newsieve", "text_docs"]
+news = ["tickhub_cn"]
+social_buzz = ["tickhub_cn"]
+policy_feed = ["tickhub_cn", "text_docs"]
 money_flow = ["tickhub_cn"]
 dragon_tiger = ["tickhub_cn"]
 lockup_calendar = ["tickhub_cn"]

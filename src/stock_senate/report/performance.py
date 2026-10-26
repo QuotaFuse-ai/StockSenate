@@ -74,25 +74,39 @@ def summarize(run_id: str | None = None, *, home: Path | str | None = None) -> d
 
     records = [_row(state) for state in states]
     ratings = Counter(str(item["rating"] or "unknown") for item in records)
-    actions = Counter(str((state.get("decision") or {}).get("action") or "未知") for state in states)
+    actions = Counter(
+        str((state.get("decision") or {}).get("action") or "未知") for state in states
+    )
     statuses = Counter(str(item["data_status"] or "missing") for item in records)
     confidences = [float(item["confidence"]) for item in records if item["confidence"] is not None]
-    quality_scores = [float(item["quality_score"]) for item in records if item["quality_score"] is not None]
+    quality_scores = [
+        float(item["quality_score"]) for item in records if item["quality_score"] is not None
+    ]
 
     stance_counts: dict[str, Counter[str]] = {}
     for state in states:
         for report in state.get("analysts") or []:
             role = str(report.get("role") or "")
             if role:
-                stance_counts.setdefault(role, Counter())[str(report.get("stance") or "unknown")] += 1
+                stance_counts.setdefault(role, Counter())[
+                    str(report.get("stance") or "unknown")
+                ] += 1
 
     attribution_by_rating: dict[str, dict[str, Any]] = {}
     for rating in sorted(ratings):
         subset = [item for item in records if str(item["rating"] or "unknown") == rating]
         attribution_by_rating[rating] = {
             "runs": len(subset),
-            "mean_confidence": _mean([float(item["confidence"]) for item in subset if item["confidence"] is not None]),
-            "mean_quality": _mean([float(item["quality_score"]) for item in subset if item["quality_score"] is not None]),
+            "mean_confidence": _mean(
+                [float(item["confidence"]) for item in subset if item["confidence"] is not None]
+            ),
+            "mean_quality": _mean(
+                [
+                    float(item["quality_score"])
+                    for item in subset
+                    if item["quality_score"] is not None
+                ]
+            ),
             "low_quality_runs": sum(1 for item in subset if item["low_quality"]),
         }
 

@@ -17,6 +17,7 @@ import json
 import os
 import shutil
 import tomllib
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -41,50 +42,145 @@ _warned: set[str] = set()
 _BUILTIN_DEFAULTS: dict[str, Any] = {
     "agent_roles": {
         "roles": {
-            "market": {"display_name": "市场分析师", "kind": "analyst", "enabled": True,
-                       "tools": ["kline", "quote", "money_flow"], "output_schema": "AnalystReport"},
-            "social": {"display_name": "情绪分析师", "kind": "analyst", "enabled": True,
-                       "tools": ["social_buzz", "news"], "output_schema": "AnalystReport"},
-            "news": {"display_name": "新闻分析师", "kind": "analyst", "enabled": True,
-                     "tools": ["news", "announcement"], "output_schema": "AnalystReport"},
-            "fundamentals": {"display_name": "基本面分析师", "kind": "analyst", "enabled": True,
-                             "tools": ["financial"], "output_schema": "AnalystReport"},
-            "policy": {"display_name": "政策分析师", "kind": "analyst", "enabled": True,
-                       "tools": ["policy_feed", "news"], "output_schema": "AnalystReport"},
-            "hot_money": {"display_name": "游资追踪", "kind": "analyst", "enabled": True,
-                          "tools": ["dragon_tiger", "money_flow"], "output_schema": "AnalystReport"},
-            "lockup": {"display_name": "解禁观察", "kind": "analyst", "enabled": True,
-                       "tools": ["lockup_calendar", "announcement"], "output_schema": "AnalystReport"},
-            "bull": {"display_name": "多头研究员", "kind": "researcher", "enabled": True,
-                     "tools": [], "output_schema": "ResearchArgument"},
-            "bear": {"display_name": "空头研究员", "kind": "researcher", "enabled": True,
-                     "tools": [], "output_schema": "ResearchArgument"},
-            "research_manager": {"display_name": "研究经理", "kind": "manager", "enabled": True,
-                                 "tools": [], "output_schema": "ResearchVerdict"},
-            "trader": {"display_name": "交易员", "kind": "trader", "enabled": True,
-                       "tools": ["kline", "quote"], "output_schema": "TradePlan"},
-            "risk_aggressive": {"display_name": "激进风险辩手", "kind": "risk", "enabled": True,
-                                "tools": [], "output_schema": "RiskArgument"},
-            "risk_neutral": {"display_name": "中立风险辩手", "kind": "risk", "enabled": True,
-                             "tools": [], "output_schema": "RiskArgument"},
-            "risk_conservative": {"display_name": "保守风险辩手", "kind": "risk", "enabled": True,
-                                  "tools": [], "output_schema": "RiskArgument"},
-            "portfolio_manager": {"display_name": "投资经理", "kind": "manager", "enabled": True,
-                                  "tools": [], "output_schema": "FinalDecision"},
-            "quality_gate": {"display_name": "质量闸门", "kind": "judge", "enabled": True,
-                             "tools": [], "output_schema": "QualityVerdict"},
+            "market": {
+                "display_name": "市场分析师",
+                "kind": "analyst",
+                "enabled": True,
+                "tools": ["kline", "quote", "money_flow"],
+                "output_schema": "AnalystReport",
+            },
+            "social": {
+                "display_name": "情绪分析师",
+                "kind": "analyst",
+                "enabled": True,
+                "tools": ["social_buzz", "news"],
+                "output_schema": "AnalystReport",
+            },
+            "news": {
+                "display_name": "新闻分析师",
+                "kind": "analyst",
+                "enabled": True,
+                "tools": ["news", "announcement"],
+                "output_schema": "AnalystReport",
+            },
+            "fundamentals": {
+                "display_name": "基本面分析师",
+                "kind": "analyst",
+                "enabled": True,
+                "tools": ["financial"],
+                "output_schema": "AnalystReport",
+            },
+            "policy": {
+                "display_name": "政策分析师",
+                "kind": "analyst",
+                "enabled": True,
+                "tools": ["policy_feed", "news"],
+                "output_schema": "AnalystReport",
+            },
+            "hot_money": {
+                "display_name": "游资追踪",
+                "kind": "analyst",
+                "enabled": True,
+                "tools": ["dragon_tiger", "money_flow"],
+                "output_schema": "AnalystReport",
+            },
+            "lockup": {
+                "display_name": "解禁观察",
+                "kind": "analyst",
+                "enabled": True,
+                "tools": ["lockup_calendar", "announcement"],
+                "output_schema": "AnalystReport",
+            },
+            "bull": {
+                "display_name": "多头研究员",
+                "kind": "researcher",
+                "enabled": True,
+                "tools": [],
+                "output_schema": "ResearchArgument",
+            },
+            "bear": {
+                "display_name": "空头研究员",
+                "kind": "researcher",
+                "enabled": True,
+                "tools": [],
+                "output_schema": "ResearchArgument",
+            },
+            "research_manager": {
+                "display_name": "研究经理",
+                "kind": "manager",
+                "enabled": True,
+                "tools": [],
+                "output_schema": "ResearchVerdict",
+            },
+            "trader": {
+                "display_name": "交易员",
+                "kind": "trader",
+                "enabled": True,
+                "tools": ["kline", "quote"],
+                "output_schema": "TradePlan",
+            },
+            "risk_aggressive": {
+                "display_name": "激进风险辩手",
+                "kind": "risk",
+                "enabled": True,
+                "tools": [],
+                "output_schema": "RiskArgument",
+            },
+            "risk_neutral": {
+                "display_name": "中立风险辩手",
+                "kind": "risk",
+                "enabled": True,
+                "tools": [],
+                "output_schema": "RiskArgument",
+            },
+            "risk_conservative": {
+                "display_name": "保守风险辩手",
+                "kind": "risk",
+                "enabled": True,
+                "tools": [],
+                "output_schema": "RiskArgument",
+            },
+            "portfolio_manager": {
+                "display_name": "投资经理",
+                "kind": "manager",
+                "enabled": True,
+                "tools": [],
+                "output_schema": "FinalDecision",
+            },
+            "quality_gate": {
+                "display_name": "质量闸门",
+                "kind": "judge",
+                "enabled": True,
+                "tools": [],
+                "output_schema": "QualityVerdict",
+            },
         },
         "custom": {},
         "limits": {"max_roles": 12, "max_custom_roles": 5},
         "tool_permissions": {"enforce": True, "deny_write_tools": True},
     },
     "workflow": {
-        "topology": {"pipeline": ["analysts", "bull_bear_debate", "research_manager",
-                                  "trader", "risk_debate", "portfolio_manager"]},
-        "debate": {"max_debate_rounds": 2, "max_risk_discuss_rounds": 2,
-                   "convergence_enabled": True, "convergence_min_new_points_ratio": 0.2},
-        "hitl": {"enabled": True, "checkpoints": ["after_trader", "before_final"],
-                 "on_timeout": "auto_approve"},
+        "topology": {
+            "pipeline": [
+                "analysts",
+                "bull_bear_debate",
+                "research_manager",
+                "trader",
+                "risk_debate",
+                "portfolio_manager",
+            ]
+        },
+        "debate": {
+            "max_debate_rounds": 2,
+            "max_risk_discuss_rounds": 2,
+            "convergence_enabled": True,
+            "convergence_min_new_points_ratio": 0.2,
+        },
+        "hitl": {
+            "enabled": True,
+            "checkpoints": ["after_trader", "before_final"],
+            "on_timeout": "auto_approve",
+        },
         "quality_gate": {"enabled": True, "threshold": 70, "block_on_fail": False},
         "budget": {"max_llm_calls": 60, "max_total_tokens": 400000, "max_wall_clock_seconds": 1800},
     },
@@ -93,34 +189,61 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
         "sections": {
             "analysts": {"title": "一、分析师观点"},
             "research": {"title": "二、多空辩论与研究经理结论"},
-            "trade": {"title": "三、交易方案",
-                      "forbidden_fields": ["order_id", "broker_account", "auto_order"]},
+            "trade": {
+                "title": "三、交易方案",
+                "forbidden_fields": ["order_id", "broker_account", "auto_order"],
+            },
             "risk": {"title": "四、风险辩论"},
-            "decision": {"title": "五、投资经理终审", "fields": ["rating", "horizon", "reasons", "risks", "confidence"]},
+            "decision": {
+                "title": "五、投资经理终审",
+                "fields": ["rating", "horizon", "reasons", "risks", "confidence"],
+            },
             "quality": {"title": "六、质量评估"},
             "data": {"title": "附：数据来源与新鲜度"},
         },
-        "disclaimer": {"text": "本报告由 AI 自动生成，仅用于研究与教学，不构成任何投资建议，也不包含可执行的交易指令。"},
+        "disclaimer": {
+            "text": "本报告由 AI 自动生成，仅用于研究与教学，"
+            "不构成任何投资建议，也不包含可执行的交易指令。"
+        },
     },
     "data_source": {
         "global": {"mode": "priority", "allow_fallback": True, "forbid_llm_fill": True},
-        "providers": {"local_json": {"kind": "json_file", "root": "data/local",
-                                     "layout": "{domain}/{code}/{date}.json"}},
+        "providers": {
+            "local_json": {
+                "kind": "json_file",
+                "root": "data/local",
+                "layout": "{domain}/{code}/{date}.json",
+            }
+        },
         "routing": {},
         "freshness": {"enforce_no_lookahead": True},
     },
     "llm_config": {
-        "llm": {"llm_provider": "offline", "deep_think_llm": "offline",
-                "quick_think_llm": "offline", "max_tokens": 4096,
-                "market_lookback_days": 60, "llm_timeout": 150, "llm_max_retries": 3},
+        "llm": {
+            "llm_provider": "offline",
+            "deep_think_llm": "offline",
+            "quick_think_llm": "offline",
+            "max_tokens": 4096,
+            "market_lookback_days": 60,
+            "llm_timeout": 150,
+            "llm_max_retries": 3,
+        },
     },
     "alert_rules": {"global": {"enabled": False}, "channels": {}, "rules": []},
     "budget": {
-        "per_run": {"max_llm_calls": 60, "max_input_tokens": 300000,
-                    "max_output_tokens": 100000, "max_wall_clock_seconds": 1800,
-                    "on_exceed": "stop"},
-        "circuit_breaker": {"enabled": True, "failure_threshold": 5,
-                            "open_seconds": 60, "max_open_seconds": 900},
+        "per_run": {
+            "max_llm_calls": 60,
+            "max_input_tokens": 300000,
+            "max_output_tokens": 100000,
+            "max_wall_clock_seconds": 1800,
+            "on_exceed": "stop",
+        },
+        "circuit_breaker": {
+            "enabled": True,
+            "failure_threshold": 5,
+            "open_seconds": 60,
+            "max_open_seconds": 900,
+        },
     },
 }
 
@@ -232,51 +355,52 @@ def _default_config() -> dict[str, Any]:
     return copy.deepcopy(_BUILTIN_DEFAULTS)
 
 
-def _is_loaded_config(config: dict[str, Any]) -> bool:
+def _is_loaded_config(config: Mapping[str, Any]) -> bool:
     """True for the dict produced by ``cli._load_config_dir``."""
     return "config_dir" in config and any(
         key in config for key in ("agent_roles", "workflow", "llm_config", "data_source")
     )
 
 
-def load_config(config: dict[str, Any] | str | Path | None = None) -> dict[str, Any]:
+def load_config(config: Mapping[str, Any] | str | Path | None = None) -> dict[str, Any]:
     """Return the effective configuration as a plain dictionary.
 
     ``config`` may be a directory path, a partial override mapping, the merged
     mapping built by the CLI, or ``None`` for defaults + the user directory.
     """
     cfg = _default_config()
+    given = dict(config) if isinstance(config, Mapping) else None
 
     explicit_dir: Path | None = None
     if isinstance(config, (str, Path)):
         explicit_dir = Path(config).expanduser()
-    elif isinstance(config, dict) and _is_loaded_config(config):
-        explicit_dir = Path(config.get("config_dir", config_dir())).expanduser()
+    elif given is not None and _is_loaded_config(given):
+        explicit_dir = Path(given.get("config_dir", config_dir())).expanduser()
 
     user: dict[str, Any] = {}
     if explicit_dir is not None:
         user = read_config_dir(explicit_dir)
-    elif config is None or not _is_loaded_config(config or {}):
+    elif given is None or not _is_loaded_config(given):
         directory = config_dir()
         if directory.is_dir():
             user = read_config_dir(directory)
 
     cfg = deep_merge(cfg, user)
 
-    if isinstance(config, dict):
+    if given is not None:
         overrides = {
             key: value
-            for key, value in config.items()
-            if key not in {"config_dir"} and not _is_loaded_config(config)
+            for key, value in given.items()
+            if key not in {"config_dir"} and not _is_loaded_config(given)
         }
         if overrides:
             cfg = deep_merge(cfg, overrides)
-        elif _is_loaded_config(config):
+        elif _is_loaded_config(given):
             # The CLI already merged files; honour them verbatim.
             for key in CONFIG_FILENAMES:
                 stem = key.removesuffix(".toml")
-                if stem in config:
-                    cfg = deep_merge(cfg, {stem: config[stem]})
+                if stem in given:
+                    cfg = deep_merge(cfg, {stem: given[stem]})
 
     _apply_env(cfg)
     cfg["config_dir"] = str(explicit_dir or config_dir())
@@ -309,7 +433,9 @@ def _apply_env(cfg: dict[str, Any]) -> None:
 
 def config_hash(cfg: dict[str, Any]) -> str:
     """Stable hash of the semantic configuration (paths excluded)."""
-    clean = {key: value for key, value in cfg.items() if key not in {"config_dir", "home", "config_hash"}}
+    clean = {
+        key: value for key, value in cfg.items() if key not in {"config_dir", "home", "config_hash"}
+    }
     blob = json.dumps(clean, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
@@ -327,11 +453,19 @@ def migrate_legacy(target: Path | None = None, *, dry_run: bool = False) -> dict
     legacy = Path.home() / ".tradingagents"
     destination = Path(target).expanduser() if target else home_dir()
     if not legacy.exists():
-        return {"migrated": False, "reason": "legacy directory absent",
-                "source": str(legacy), "target": str(destination)}
+        return {
+            "migrated": False,
+            "reason": "legacy directory absent",
+            "source": str(legacy),
+            "target": str(destination),
+        }
     if dry_run:
-        return {"migrated": False, "dry_run": True,
-                "source": str(legacy), "target": str(destination)}
+        return {
+            "migrated": False,
+            "dry_run": True,
+            "source": str(legacy),
+            "target": str(destination),
+        }
     destination.mkdir(parents=True, exist_ok=True)
     migrated: list[str] = []
     for item in legacy.iterdir():
@@ -343,8 +477,13 @@ def migrate_legacy(target: Path | None = None, *, dry_run: bool = False) -> dict
         else:
             shutil.copy2(item, target_path)
         migrated.append(item.name)
-    return {"migrated": True, "source": str(legacy), "target": str(destination),
-            "copied": migrated, "source_untouched": True}
+    return {
+        "migrated": True,
+        "source": str(legacy),
+        "target": str(destination),
+        "copied": migrated,
+        "source_untouched": True,
+    }
 
 
 __all__ = [

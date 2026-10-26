@@ -25,8 +25,9 @@ from stock_senate.data.providers.base import (
 class LocalJsonProvider(Provider):
     kind = "json_file"
 
-    def fetch(self, domain: str, code: str, as_of: str,
-              params: dict[str, Any] | None = None) -> Any:
+    def fetch(
+        self, domain: str, code: str, as_of: str, params: dict[str, Any] | None = None
+    ) -> Any:
         directory = self._root() / domain / code
         if not directory.is_dir():
             raise ProviderNotAvailable(f"{domain}/{code}: no archive directory")
@@ -69,11 +70,18 @@ class LocalJsonProvider(Provider):
 def _split_payload(raw: Any) -> tuple[Any, dict[str, Any]]:
     """Accept a bare payload, ``{"data","meta"}`` or ``{"data","data_as_of"}``."""
     envelope_keys = (
-        "data_as_of", "source", "source_detail", "confidence",
-        "fetched_at", "freshness", "data_source_status",
+        "data_as_of",
+        "source",
+        "source_detail",
+        "confidence",
+        "fetched_at",
+        "freshness",
+        "data_source_status",
     )
-    if isinstance(raw, dict) and "data" in raw and (
-        isinstance(raw.get("meta"), dict) or any(key in raw for key in envelope_keys)
+    if (
+        isinstance(raw, dict)
+        and "data" in raw
+        and (isinstance(raw.get("meta"), dict) or any(key in raw for key in envelope_keys))
     ):
         meta = dict(raw.get("meta") or {})
         for key in envelope_keys:

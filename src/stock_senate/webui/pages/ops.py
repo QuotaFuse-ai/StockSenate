@@ -17,6 +17,7 @@ from stock_senate.queue import manager as queue_manager
 from stock_senate.report import store
 from stock_senate.version import __version__
 from stock_senate.webui.pages.common import runtime
+from stock_senate.webui.state import WebRuntime
 from stock_senate.webui.templates import Html, esc, page, table, tag
 
 # DEC-003: one port per service; these are fixed contracts.
@@ -30,7 +31,7 @@ SERVICES = (
 )
 
 
-def _facts(service: object) -> Html:
+def _facts(service: WebRuntime) -> Html:
     rows = [
         ["版本", esc(__version__)],
         ["进程启动", esc(service.started_at)],
@@ -40,15 +41,16 @@ def _facts(service: object) -> Html:
         ["状态目录", Html(f"<code>{esc(service.home)}</code>")],
         ["配置目录", Html(f"<code>{esc(service.config_dir)}</code>")],
         ["配置指纹", Html(f"<code>{esc(service.config.get('config_hash'))}</code>")],
-        ["登录模式", tag("已设口令", "ok") if service.auth.login_required else tag("本机免登录", "warn")],
+        [
+            "登录模式",
+            tag("已设口令", "ok") if service.auth.login_required else tag("本机免登录", "warn"),
+        ],
     ]
     return table(["项", "值"], rows)
 
 
 def _ports() -> Html:
-    rows = [
-        [esc(name), esc(port), esc(note)] for name, port, note in SERVICES
-    ]
+    rows = [[esc(name), esc(port), esc(note)] for name, port, note in SERVICES]
     link = (
         '<p><a href="http://127.0.0.1:8787" target="_blank" rel="noopener noreferrer">'
         "打开 TickHub Admin（127.0.0.1:8787）</a></p>"
@@ -56,7 +58,7 @@ def _ports() -> Html:
     return Html(str(table(["服务", "端口", "说明"], rows)) + link)
 
 
-def _counts(service: object) -> Html:
+def _counts(service: WebRuntime) -> Html:
     runs = store.list_runs(home=service.home, limit=None)
     queue = queue_manager.status(home=service.home)
     counts = queue.get("counts") or {}

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from pathlib import Path
 
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
@@ -35,9 +34,7 @@ _JOBS_SHOWN = 60
 def _submit_form(request: Request) -> Html:
     return Html(
         '<div class="panel"><form method="post" action="/queue/submit" '
-        'enctype="multipart/form-data">'
-        + str(csrf_input(request))
-        + '<div class="row">'
+        'enctype="multipart/form-data">' + str(csrf_input(request)) + '<div class="row">'
         '<div><label for="file">CSV 文件（列：code[,date][,priority]）</label>'
         '<input id="file" type="file" name="file" accept=".csv,text/csv"></div>'
         '<div><label for="concurrency">并发数</label>'
@@ -45,7 +42,8 @@ def _submit_form(request: Request) -> Html:
         '<div><button type="submit">上传并执行</button></div>'
         "</div>"
         '<p class="muted" style="margin-bottom:6px">也可以直接粘贴 CSV 内容：</p>'
-        '<textarea name="csv" placeholder="code,date&#10;600519,2026-10-24&#10;000001,2026-10-24"></textarea>'
+        '<textarea name="csv" placeholder="code,date&#10;600519,2026-10-24'
+        '&#10;000001,2026-10-24"></textarea>'
         '<p class="muted">提交后会在本进程内同步执行完队列；同一标的不会被并发分析两次。</p>'
         "</form></div>"
     )
@@ -59,12 +57,19 @@ def _summary(payload: dict) -> Html:
     head = Html(
         (tag("队列已暂停", "warn") if paused else tag("队列可用", "ok"))
         + " "
-        + (tag(f"停止原因：{queue.get('stop_reason')}", "bad") if paused and queue.get("stop_reason") else "")
+        + (
+            tag(f"停止原因：{queue.get('stop_reason')}", "bad")
+            if paused and queue.get("stop_reason")
+            else ""
+        )
     )
     counts = payload.get("counts") or {}
     stats = [
         ["任务总数", esc(payload.get("total"))],
-        ["状态分布", esc(", ".join(f"{key}={value}" for key, value in sorted(counts.items())) or "—")],
+        [
+            "状态分布",
+            esc(", ".join(f"{key}={value}" for key, value in sorted(counts.items())) or "—"),
+        ],
         [
             "本次会话",
             esc(
@@ -107,14 +112,12 @@ def _jobs_table(request: Request, payload: dict) -> Html:
         status_value = str(job.get("status") or "")
         run_id = job.get("run_id")
         run_cell = (
-            Html(f'<a href="/reports/{esc(run_id)}">{esc(run_id)}</a>')
-            if run_id
-            else Html("—")
+            Html(f'<a href="/reports/{esc(run_id)}">{esc(run_id)}</a>') if run_id else Html("—")
         )
         actions = str(_actions(job, csrf))
         rows.append(
             [
-                Html(f'<code>{esc(job.get("id"))}</code>'),
+                Html(f"<code>{esc(job.get('id'))}</code>"),
                 esc(job.get("code")),
                 esc(job.get("date")),
                 tag(status_value, _STATUS_TAGS.get(status_value, "")),
@@ -136,13 +139,19 @@ def _jobs_table(request: Request, payload: dict) -> Html:
 def _result(payload: dict) -> Html:
     if payload.get("ok") is False:
         return Html(f'<div class="notice error">{esc(payload.get("error") or "提交失败")}</div>')
-    parts = [f'<p>已提交 {esc(payload.get("submitted"))} 个任务（并发 {esc(payload.get("concurrency"))}）。</p>']
+    parts = [
+        f"<p>已提交 {esc(payload.get('submitted'))} 个任务"
+        f"（并发 {esc(payload.get('concurrency'))}）。</p>"
+    ]
     skipped = payload.get("skipped") or []
     if skipped:
         parts.append(
             table(
                 ["标的", "日期", "跳过原因"],
-                [[esc(item.get("code")), esc(item.get("date")), esc(item.get("reason"))] for item in skipped],
+                [
+                    [esc(item.get("code")), esc(item.get("date")), esc(item.get("reason"))]
+                    for item in skipped
+                ],
             )
         )
     errors = payload.get("errors") or []
@@ -152,13 +161,14 @@ def _result(payload: dict) -> Html:
             + str(
                 table(
                     ["行", "标的", "错误"],
-                    [[esc(item.get("row")), esc(item.get("code")), esc(item.get("error"))] for item in errors],
+                    [
+                        [esc(item.get("row")), esc(item.get("code")), esc(item.get("error"))]
+                        for item in errors
+                    ],
                 )
             )
         )
-    parts.append(
-        '<details><summary>原始结果</summary>' + str(json_block(payload)) + "</details>"
-    )
+    parts.append("<details><summary>原始结果</summary>" + str(json_block(payload)) + "</details>")
     return Html("".join(parts))
 
 
@@ -259,11 +269,7 @@ def _concurrency(value: object) -> int:
 def _error(request: Request, message: str) -> HTMLResponse:
     service = runtime(request)
     payload = queue_manager.status(home=service.home)
-    body = Html(
-        str(_submit_form(request))
-        + "<h2>任务</h2>"
-        + str(_jobs_table(request, payload))
-    )
+    body = Html(str(_submit_form(request)) + "<h2>任务</h2>" + str(_jobs_table(request, payload)))
     return HTMLResponse(
         str(page(request, "队列", body, active="/queue", error=message)),
         status_code=400,

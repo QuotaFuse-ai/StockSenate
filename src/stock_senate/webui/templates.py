@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import html
 import json
-from typing import Any, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 DISCLAIMER = (
     "StockSenate 仅用于投研研究与回测推演，不构成任何投资建议，"
@@ -48,7 +49,8 @@ header nav { display: flex; gap: 4px; flex-wrap: wrap; }
 header nav a { color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 6px; }
 header nav a:hover { background: #eef2ff; color: var(--accent); }
 header nav a.active { background: #e0e7ff; color: var(--accent); font-weight: 600; }
-header .right { margin-left: auto; display: flex; gap: 10px; align-items: center; color: var(--muted); }
+header .right { margin-left: auto; display: flex; gap: 10px; align-items: center;
+  color: var(--muted); }
 main { max-width: 1180px; margin: 22px auto 60px; padding: 0 18px; }
 h1 { font-size: 20px; margin: 0 0 16px; }
 h2 { font-size: 16px; margin: 22px 0 10px; }
@@ -60,17 +62,22 @@ h2 { font-size: 16px; margin: 22px 0 10px; }
 .notice.error { background: #fef2f2; color: var(--bad); border: 1px solid #fecaca; }
 .notice.warn { background: #fffbeb; color: var(--warn); border: 1px solid #fde68a; }
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--line);
+  vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase;
+  letter-spacing: .04em; }
 tr:last-child td { border-bottom: none; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 form.inline { display: inline; }
 label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
-input[type=text], input[type=date], input[type=password], input[type=number], select, textarea {
+input[type=text], input[type=date], input[type=password], input[type=number], select,
+textarea {
   width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px;
   font: inherit; background: #fff; color: var(--ink); }
-textarea { min-height: 96px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
-.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end; }
+textarea { min-height: 96px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px; }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;
+  align-items: end; }
 .check { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; }
 .check input { width: auto; }
 button { padding: 8px 16px; border-radius: 7px; border: 1px solid var(--accent);
@@ -91,7 +98,8 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 18px
 .banner { background: #fffbeb; border-bottom: 1px solid #fde68a; color: var(--warn);
   padding: 6px 22px; font-size: 12px; }
 .progress { height: 10px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
-.progress > span { display: block; height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+.progress > span { display: block; height: 100%; background: var(--accent); width: 0;
+  transition: width .3s; }
 dl.kv { display: grid; grid-template-columns: 180px 1fr; gap: 6px 14px; margin: 0; }
 dl.kv dt { color: var(--muted); }
 dl.kv dd { margin: 0; word-break: break-word; }
@@ -141,9 +149,7 @@ def table(
 
 
 def kv_table(data: Mapping[str, Any]) -> Html:
-    items = "".join(
-        f"<dt>{esc(key)}</dt><dd>{safe(value)}</dd>" for key, value in data.items()
-    )
+    items = "".join(f"<dt>{esc(key)}</dt><dd>{safe(value)}</dd>" for key, value in data.items())
     return Html(f'<dl class="kv">{items}</dl>')
 
 
@@ -176,7 +182,7 @@ def page(
         messages += f'<div class="notice error">{esc(error)}</div>'
     if not chrome:
         return Html(
-            "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
+            '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
             f"<title>{esc(title)} · StockSenate</title><style>{_STYLE}</style></head>"
             f'<body><main style="max-width:520px;margin-top:12vh">{messages}{safe(body)}</main>'
@@ -200,7 +206,7 @@ def page(
         "服务只允许绑定回环地址。设置口令后需重新登录。</div>"
     )
     return Html(
-        "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
+        '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>{esc(title)} · StockSenate</title><style>{_STYLE}</style>{extra_head}</head>"
         f'<body><header><span class="brand">StockSenate</span><nav>{links}</nav>'

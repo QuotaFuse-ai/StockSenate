@@ -8,7 +8,8 @@ code can surface it, while the decision itself still reaches the reader.
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from stock_senate.roles.schemas import (
     AnalystReport,
@@ -70,7 +71,7 @@ def run_quality_gate(
     return model.model_copy(
         update={
             "threshold": threshold,
-            "low_quality": model.score < threshold,
+            "low_quality": model.low_quality or model.score < threshold,
         }
     )
 

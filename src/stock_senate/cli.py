@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +68,26 @@ app.add_typer(mcp_app, name="mcp")
 app.add_typer(config_app, name="config")
 
 
+def _print_version(value: bool) -> None:
+    if value:
+        typer.echo(f"stocksenate {__version__}")
+        raise typer.Exit(EXIT_OK)
+
+
+@app.callback()
+def _root(
+    show_version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        callback=_print_version,
+        is_eager=True,
+        help="打印版本号并退出。",
+    ),
+) -> None:
+    """StockSenate — 多角色投研合议系统。只做投研分析与回测推演，不输出交易指令。"""
+
+
 # --------------------------------------------------------------------------- #
 # helpers
 # --------------------------------------------------------------------------- #
@@ -76,12 +98,56 @@ def _fail(message: str, code: int = EXIT_USAGE) -> typer.Exit:
     return typer.Exit(code)
 
 
+def _exit_code_for(exc: BaseException) -> int:
+    """Map engine exceptions onto the documented exit codes.
+
+    Order matters: ``RoleError``, ``NodeConfigError``, ``ConfigEditError`` and
+    ``LLMResponseInvalid`` all derive from ``ValueError``, and
+    ``LLMRateLimited``/``LLMConfigError`` derive from ``LLMUnavailable``.
+    """
+    from stock_senate.config.edit import ConfigEditError
+    from stock_senate.data.providers.base import ProviderError, ProviderNotAvailable
+    from stock_senate.roles.llm import LLMConfigError, LLMRateLimited, LLMResponseInvalid
+    from stock_senate.roles.registry import RoleError
+    from stock_senate.workflow.budget import BudgetExceeded
+    from stock_senate.workflow.nodes.base import NodeConfigError
+
+    if isinstance(exc, LLMRateLimited):
+        return EXIT_RATE_LIMIT
+    if isinstance(exc, (LLMConfigError, RoleError, NodeConfigError, ConfigEditError)):
+        return EXIT_CONFIG
+    if isinstance(exc, (LLMResponseInvalid, ProviderNotAvailable, ProviderError)):
+        return EXIT_DATA
+    if isinstance(exc, BudgetExceeded):
+        return EXIT_PARTIAL
+    if isinstance(exc, ValueError):
+        return EXIT_USAGE
+    return 1
+
+
+@contextmanager
+def _mapped_errors(prefix: str) -> Iterator[None]:
+    """Translate engine exceptions into the documented exit codes.
+
+    Unknown exceptions keep their traceback (exit 1) so defects stay visible.
+    """
+    try:
+        yield
+    except typer.Exit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - classified by contract
+        code = _exit_code_for(exc)
+        if code == 1:
+            raise
+        raise _fail(f"{prefix}：{exc}", code) from exc
+
+
 def _config_dir() -> Path:
     override = os.environ.get("STOCKSENATE_CONFIG_DIR")
     if override:
         return Path(override).expanduser()
-    legacy = os.environ.get("QF_COUNCIL_CONFIG_DIR") or os.environ.get("TRADINGAGENTS_CONFIG_DIR")
-    if legacy and not override:
+    legacy = os.environ.get("TRADINGAGENTS_CONFIG_DIR") or os.environ.get("QF_COUNCIL_CONFIG_DIR")
+    if legacy:
         typer.secho(
             f"提示：检测到旧环境变量，配置目录仍读 {legacy}；请迁移到 STOCKSENATE_CONFIG_DIR。",
             fg=typer.colors.YELLOW,
@@ -102,7 +168,7 @@ def _require(module: str, milestone: str) -> Any:
             f"{module} 不可用：{exc}。该能力计划在 {milestone} 交付；"
             f"先执行 `pip install -e .[all]` 并检查配置。",
             EXIT_CONFIG,
-        )
+        ) from exc
 
 
 def _emit(payload: Any, output: str, rows: list[dict[str, Any]] | None = None) -> None:
@@ -147,7 +213,7 @@ def _load_config_dir(path: Path | None) -> dict[str, Any]:
         try:
             merged[name.removesuffix(".toml")] = toml.load(file)
         except Exception as exc:  # noqa: BLE001 - surfaced to the user
-            raise _fail(f"配置文件解析失败 {file}: {exc}", EXIT_CONFIG)
+            raise _fail(f"配置文件解析失败 {file}: {exc}", EXIT_CONFIG) from exc
     return merged
 
 
@@ -170,16 +236,26 @@ def analyze(
     output: str = typer.Option("table", "--output", "-o", help="table | json | csv"),
     enable: list[str] = typer.Option(None, "--enable", help="临时启用自定义角色，可重复。"),
     disable: list[str] = typer.Option(None, "--disable", help="临时停用角色，可重复。"),
-    weight: list[str] = typer.Option(None, "--weight", help="角色权重，形如 custom_macro=0.6，可重复。"),
+    weight: list[str] = typer.Option(
+        None, "--weight", help="角色权重，形如 custom_macro=0.6，可重复。"
+    ),
     no_hitl: bool = typer.Option(False, "--no-hitl", help="跳过人工介入检查点（会在报告中留痕）。"),
 ) -> None:
     """运行一次完整的多角色合议分析。"""
     from stock_senate.graph.senate_graph import SenateGraph
 
     overrides = {"enable": enable or [], "disable": disable or [], "weights": weight or []}
-    graph = SenateGraph(config=_load_config_dir(config))
-    state, decision = graph.propagate(code, date or _today(), hitl=not no_hitl, overrides=overrides)
-    payload = {"code": code, "date": date or _today(), "decision": decision, "state_keys": sorted(state)}
+    with _mapped_errors("analyze"):
+        graph = SenateGraph(config=_load_config_dir(config))
+        state, decision = graph.propagate(
+            code, date or _today(), hitl=not no_hitl, overrides=overrides
+        )
+    payload = {
+        "code": code,
+        "date": date or _today(),
+        "decision": decision,
+        "state_keys": sorted(state),
+    }
     _emit(
         payload,
         output,
@@ -206,14 +282,14 @@ def sync_news_cmd(
     since: str = typer.Option(None, "--since", help="YYYY-MM-DD，缺省 7 天前。"),
     output: str = typer.Option("table", "--output", "-o", help="table | json | csv"),
 ) -> None:
-    """通过 Newsieve 拉取并过滤资讯。"""
-    provider = _require("stock_senate.data.providers.newsieve", "M3")
+    """通过 TickHub-CN 拉取并过滤资讯。"""
+    provider = _require("stock_senate.data.providers.tickhub", "M3")
     try:
         payload = provider.sync(since=since)
     except provider.ProviderNotAvailable as exc:
-        # Newsieve 是可选依赖：未安装时如实报告，不抛出裸 traceback。
+        # stockdata 是可选依赖：未安装时如实报告，不抛出裸 traceback。
         _emit({"ok": False, "since": since, "reason": str(exc)}, output)
-        raise typer.Exit(EXIT_DATA)
+        raise typer.Exit(EXIT_DATA) from exc
     _emit(payload, output)
 
 
@@ -251,7 +327,9 @@ def role_show(
     output: str = typer.Option("table", "--output", "-o"),
 ) -> None:
     """显示单个角色的配置。"""
-    role = _roles(config).get(name)
+    from stock_senate.config.edit import canonical_name
+
+    role = _roles(config).get(canonical_name(name))
     if role is None:
         raise _fail(f"未知角色: {name}", EXIT_CONFIG)
     _emit(role, output)
@@ -307,6 +385,7 @@ def backtest_run(
     slippage: float = typer.Option(0.0, "--slippage", help="滑点，按成交价比例。"),
     fee: float = typer.Option(0.0, "--fee", help="单边手续费率。"),
     out_dir: Path = typer.Option(None, "--out-dir", help="结果输出目录。"),
+    config: Path = typer.Option(None, "--config", "-c", help="配置目录，默认 ~/.stock_senate。"),
     output: str = typer.Option("table", "--output", "-o", help="table | json | csv"),
 ) -> None:
     """回测推演（与 performance 事后归因是两件事）。"""
@@ -316,7 +395,7 @@ def backtest_run(
     if not targets:
         raise _fail("backtest run 需要 --code 或 --codes")
     engine = _require("stock_senate.backtest.engine", "M3")
-    try:
+    with _mapped_errors("backtest run"):
         result = engine.run(
             codes=targets,
             start=start,
@@ -325,9 +404,8 @@ def backtest_run(
             slippage=slippage,
             fee=fee,
             out_dir=out_dir,
+            config=config,
         )
-    except ValueError as exc:
-        raise _fail(f"backtest run 参数不合法：{exc}")
     _emit(result, output)
     if (result.get("data") or {}).get("status") == "missing":
         raise typer.Exit(EXIT_DATA)
@@ -584,12 +662,26 @@ def config_migrate(
         raise typer.Exit(EXIT_CONFIG)
 
 
+def _ensure_utf8_stdio() -> None:
+    """Make redirected output UTF-8; Windows otherwise uses the ANSI code page."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):  # detached or closed stream
+            pass
+
+
 def main() -> None:
+    _ensure_utf8_stdio()
     app()
 
 
 def legacy_main() -> None:
     """Entry point for the deprecated ``tradingagents`` command."""
+    _ensure_utf8_stdio()
     typer.secho(
         "警告：`tradingagents` 已更名为 `ssenate`，本命令将在下个大版本移除。",
         fg=typer.colors.YELLOW,

@@ -144,7 +144,9 @@ def validate_alert_rules(config: dict[str, Any]) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 
-def _check_llm(data: dict[str, Any], errors: list[dict[str, str]], warnings: list[dict[str, str]]) -> None:
+def _check_llm(
+    data: dict[str, Any], errors: list[dict[str, str]], warnings: list[dict[str, str]]
+) -> None:
     llm = data.get("llm", {})
     for key in ("llm_provider", "deep_think_llm", "quick_think_llm"):
         if not llm.get(key):
@@ -179,7 +181,11 @@ def _check_llm(data: dict[str, Any], errors: list[dict[str, str]], warnings: lis
             _error(errors, "llm_config.toml", f"llm.role_llms.{key}", "需要 provider 与 model")
         if key != canonical:
             warnings.append(
-                {"file": "llm_config.toml", "key": f"llm.role_llms.{key}", "message": f"别名请改为规范键 `{canonical}`"}
+                {
+                    "file": "llm_config.toml",
+                    "key": f"llm.role_llms.{key}",
+                    "message": f"别名请改为规范键 `{canonical}`",
+                }
             )
 
     allowed = llm.get("allowed_keys", {})
@@ -187,10 +193,14 @@ def _check_llm(data: dict[str, Any], errors: list[dict[str, str]], warnings: lis
         declared = set(allowed.get("keys", ROLE_LLM_KEYS))
         unknown = declared - set(ROLE_LLM_KEYS)
         if unknown:
-            _error(errors, "llm_config.toml", "llm.allowed_keys.keys", f"包含未知键：{sorted(unknown)}")
+            _error(
+                errors, "llm_config.toml", "llm.allowed_keys.keys", f"包含未知键：{sorted(unknown)}"
+            )
 
 
-def _check_roles_file(data: dict[str, Any], errors: list[dict[str, str]], warnings: list[dict[str, str]]) -> None:
+def _check_roles_file(
+    data: dict[str, Any], errors: list[dict[str, str]], warnings: list[dict[str, str]]
+) -> None:
     _check_roles(data, errors, warnings)
     limits = data.get("limits", {})
     max_custom = limits.get("max_custom_roles", 5)
@@ -211,7 +221,9 @@ def _check_roles_file(data: dict[str, Any], errors: list[dict[str, str]], warnin
         )
 
 
-def _check_roles(data: dict[str, Any], errors: list[dict[str, str]], warnings: list[dict[str, str]]) -> None:
+def _check_roles(
+    data: dict[str, Any], errors: list[dict[str, str]], warnings: list[dict[str, str]]
+) -> None:
     roles = data.get("roles", {})
     limits = data.get("limits", {})
     max_roles = limits.get("max_roles", 12)
@@ -219,14 +231,8 @@ def _check_roles(data: dict[str, Any], errors: list[dict[str, str]], warnings: l
     if not roles:
         _error(errors, "agent_roles.toml", "roles", "至少需要一个角色")
 
-    enabled = [
-        key for key, value in roles.items() if (value or {}).get("enabled", True)
-    ]
-    analysts = [
-        key
-        for key in enabled
-        if (roles.get(key) or {}).get("kind") == "analyst"
-    ]
+    enabled = [key for key, value in roles.items() if (value or {}).get("enabled", True)]
+    analysts = [key for key in enabled if (roles.get(key) or {}).get("kind") == "analyst"]
     # 角色上限约束的是分析师席位（7 内置 + 5 自定义 = 12）。
     # 多空研究员、交易员、风险辩手、经理是固定工作流阶段，不计入该上限，
     # 否则与「7 内置」的定义自相矛盾（见 DEC-005）。
@@ -241,12 +247,26 @@ def _check_roles(data: dict[str, Any], errors: list[dict[str, str]], warnings: l
     for key, value in roles.items():
         value = value or {}
         if not value.get("kind"):
-            _error(errors, "agent_roles.toml", f"roles.{key}.kind", "必填：analyst/researcher/manager/trader/risk/judge")
+            _error(
+                errors,
+                "agent_roles.toml",
+                f"roles.{key}.kind",
+                "必填：analyst/researcher/manager/trader/risk/judge",
+            )
         if not value.get("output_schema"):
-            _error(errors, "agent_roles.toml", f"roles.{key}.output_schema", "必填：Pydantic Schema 名称")
+            _error(
+                errors,
+                "agent_roles.toml",
+                f"roles.{key}.output_schema",
+                "必填：Pydantic Schema 名称",
+            )
         if value.get("kind") == "analyst" and not value.get("tools"):
             warnings.append(
-                {"file": "agent_roles.toml", "key": f"roles.{key}.tools", "message": "分析师没有工具白名单，将只能使用上下文"}
+                {
+                    "file": "agent_roles.toml",
+                    "key": f"roles.{key}.tools",
+                    "message": "分析师没有工具白名单，将只能使用上下文",
+                }
             )
 
     missing_builtin = BUILTIN_ROLES - set(roles)
@@ -260,7 +280,12 @@ def _check_roles(data: dict[str, Any], errors: list[dict[str, str]], warnings: l
         )
 
     if (data.get("tool_permissions") or {}).get("deny_write_tools") is not True:
-        _error(errors, "agent_roles.toml", "tool_permissions.deny_write_tools", "必须为 true：本系统不做实盘交易")
+        _error(
+            errors,
+            "agent_roles.toml",
+            "tool_permissions.deny_write_tools",
+            "必须为 true：本系统不做实盘交易",
+        )
 
 
 def _check_workflow(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
@@ -268,7 +293,12 @@ def _check_workflow(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
     pipeline = topology.get("pipeline", [])
     for stage in ("analysts", "research_manager", "trader", "portfolio_manager"):
         if stage not in pipeline:
-            _error(errors, "workflow.toml", "topology.pipeline", f"缺少必需阶段 `{stage}`；终审不可跳过")
+            _error(
+                errors,
+                "workflow.toml",
+                "topology.pipeline",
+                f"缺少必需阶段 `{stage}`；终审不可跳过",
+            )
     if pipeline and pipeline[-1] != "portfolio_manager":
         _error(errors, "workflow.toml", "topology.pipeline", "最后一步必须是 portfolio_manager")
 
@@ -312,16 +342,28 @@ def _check_data_source(
     if mode not in DATA_MODES:
         _error(errors, "data_source.toml", "global.mode", f"可选 {sorted(DATA_MODES)}")
     if global_cfg.get("forbid_llm_fill") is not True:
-        _error(errors, "data_source.toml", "global.forbid_llm_fill", "必须为 true：数据缺失不得由模型补数值")
+        _error(
+            errors,
+            "data_source.toml",
+            "global.forbid_llm_fill",
+            "必须为 true：数据缺失不得由模型补数值",
+        )
 
     providers = data.get("providers", {})
     routing = data.get("routing", {})
     for domain, order in routing.items():
         for name in order:
             if name not in providers:
-                _error(errors, "data_source.toml", f"routing.{domain}", f"引用了未定义的 provider `{name}`")
+                _error(
+                    errors,
+                    "data_source.toml",
+                    f"routing.{domain}",
+                    f"引用了未定义的 provider `{name}`",
+                )
     for name, cfg in providers.items():
-        if (cfg or {}).get("kind") == "text_doc" and (cfg or {}).get("numeric_extraction") is not False:
+        if (cfg or {}).get("kind") == "text_doc" and (cfg or {}).get(
+            "numeric_extraction"
+        ) is not False:
             _error(
                 errors,
                 "data_source.toml",
@@ -331,7 +373,12 @@ def _check_data_source(
 
     freshness = data.get("freshness", {})
     if freshness.get("enforce_no_lookahead") is not True:
-        _error(errors, "data_source.toml", "freshness.enforce_no_lookahead", "必须为 true：回测禁止未来函数")
+        _error(
+            errors,
+            "data_source.toml",
+            "freshness.enforce_no_lookahead",
+            "必须为 true：回测禁止未来函数",
+        )
 
 
 def _check_alerts(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
@@ -361,13 +408,20 @@ def _check_alerts(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
     for index, rule in enumerate(rules):
         for channel in rule.get("channels", []):
             if channel not in channels:
-                _error(errors, "alert_rules.toml", f"rules[{index}].channels", f"未定义的通道 `{channel}`")
+                _error(
+                    errors,
+                    "alert_rules.toml",
+                    f"rules[{index}].channels",
+                    f"未定义的通道 `{channel}`",
+                )
 
     webhook = channels.get("webhook", {})
     if webhook.get("enabled"):
         for key in ("url_env", "secret_env"):
             if not webhook.get(key):
-                _error(errors, "alert_rules.toml", f"channels.webhook.{key}", "启用 webhook 时必须配置")
+                _error(
+                    errors, "alert_rules.toml", f"channels.webhook.{key}", "启用 webhook 时必须配置"
+                )
 
 
 def _check_budget(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
@@ -385,7 +439,9 @@ def _check_budget(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
         if breaker.get("failure_threshold", 5) < 1:
             _error(errors, "budget.toml", "circuit_breaker.failure_threshold", "必须 >= 1")
         if breaker.get("open_seconds", 60) > breaker.get("max_open_seconds", 900):
-            _error(errors, "budget.toml", "circuit_breaker.open_seconds", "不能大于 max_open_seconds")
+            _error(
+                errors, "budget.toml", "circuit_breaker.open_seconds", "不能大于 max_open_seconds"
+            )
 
 
 def _check_output(data: dict[str, Any], errors: list[dict[str, str]]) -> None:

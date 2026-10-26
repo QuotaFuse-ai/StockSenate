@@ -10,8 +10,9 @@ stages and do not consume a seat.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from stock_senate.config.schema import BUILTIN_ANALYSTS, ROLE_ALIASES, ROLE_LLM_KEYS
 
@@ -54,7 +55,7 @@ def _custom_table(section: Mapping[str, Any] | None) -> dict[str, Mapping[str, A
     if not section:
         return {}
     if isinstance(section.get("roles"), Mapping):
-        return dict(section["roles"])  # type: ignore[arg-type]
+        return dict(section["roles"])
     return {
         str(key): value
         for key, value in section.items()
@@ -151,7 +152,9 @@ class RoleRegistry:
                     raise RoleError(f"别名 {alias!r} 同时指向 {key} 与 {target}")
 
     def _validate_seats(self) -> None:
-        enabled_analysts = [spec for spec in self.roles.values() if spec.enabled and spec.is_analyst]
+        enabled_analysts = [
+            spec for spec in self.roles.values() if spec.enabled and spec.is_analyst
+        ]
         if len(enabled_analysts) > self.max_roles:
             raise RoleError(
                 f"启用 {len(enabled_analysts)} 个分析师席位，超过上限 {self.max_roles}"
@@ -159,9 +162,7 @@ class RoleRegistry:
             )
         custom = [spec for spec in enabled_analysts if spec.custom]
         if len(custom) > self.max_custom_roles:
-            raise RoleError(
-                f"启用 {len(custom)} 个自定义分析师，超过上限 {self.max_custom_roles}"
-            )
+            raise RoleError(f"启用 {len(custom)} 个自定义分析师，超过上限 {self.max_custom_roles}")
 
     # ------------------------------------------------------------------ #
     # lookup
@@ -184,9 +185,7 @@ class RoleRegistry:
 
     def analysts(self, *, enabled_only: bool = False) -> list[RoleSpec]:
         return [
-            spec
-            for spec in self.all()
-            if spec.is_analyst and (spec.enabled or not enabled_only)
+            spec for spec in self.all() if spec.is_analyst and (spec.enabled or not enabled_only)
         ]
 
     def enabled_analysts(self) -> list[RoleSpec]:

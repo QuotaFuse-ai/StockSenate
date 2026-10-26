@@ -38,7 +38,7 @@ def _price_path() -> list[float]:
 def _bars() -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     previous: float | None = None
-    for day, close in zip(_days(), _price_path()):
+    for day, close in zip(_days(), _price_path(), strict=False):
         open_ = close if previous is None else round((previous + close) / 2, 4)
         rows.append(
             {
@@ -86,8 +86,13 @@ def _config(tmp_path: Path, *, mode: str = "local") -> dict[str, object]:
             "routing": {"kline": ["local_json"]},
             "freshness": {"enforce_no_lookahead": True},
         },
-        "llm_config": {"llm": {"llm_provider": "offline", "deep_think_llm": "offline",
-                               "quick_think_llm": "offline"}},
+        "llm_config": {
+            "llm": {
+                "llm_provider": "offline",
+                "deep_think_llm": "offline",
+                "quick_think_llm": "offline",
+            }
+        },
     }
 
 
@@ -190,7 +195,6 @@ def test_missing_archive_never_invents_bars(tmp_path: Path, archive: Path) -> No
 
 
 def test_slippage_and_fee_reduce_the_simulated_result(tmp_path: Path, archive: Path) -> None:
-    end = _days()[-1]
     plain = _replay(tmp_path, out_dir=tmp_path / "plain")
     costly = _replay(tmp_path, out_dir=tmp_path / "costly", slippage=0.01, fee=0.001)
 
@@ -229,7 +233,7 @@ def test_t_plus_one_fills_and_non_overlapping_windows(tmp_path: Path, archive: P
     assert result["trades"]
 
     ordered = sorted(result["trades"], key=lambda trade: trade["entry_date"])
-    for previous, current in zip(ordered, ordered[1:]):
+    for previous, current in zip(ordered, ordered[1:], strict=False):
         assert previous["exit_date"] <= current["entry_date"]
 
     # A signal is evaluated at a close, so the fill price is the *next* open.

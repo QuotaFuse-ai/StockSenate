@@ -128,9 +128,7 @@ def _probe(middleware, headers: list[tuple[bytes, bytes]], path: str = "/mcp") -
     async def receive() -> dict:
         return {"type": "http.request", "body": b""}
 
-    asyncio.run(
-        middleware({"type": "http", "path": path, "headers": headers}, receive, send)
-    )
+    asyncio.run(middleware({"type": "http", "path": path, "headers": headers}, receive, send))
     status = events[0]["status"]
     body = events[-1].get("body", b"")
     return status, body

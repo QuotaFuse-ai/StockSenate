@@ -9,7 +9,7 @@
 | PyPI | `stocksenate` |
 | Python 包 | `stock_senate` |
 | CLI | `ssenate`（入口 `stock_senate.cli:main`） |
-| 数据底座 | TickHub-CN、TickHub-US、Newsieve |
+| 数据底座 | TickHub-CN、TickHub-US（资讯域经 TickHub-CN） |
 | 来源文档 | `councli.docx` v1.1、`councli文档.docx` v1.2（含独立 WebUI） |
 | 需求来源 | QUOT-49 |
 | 作者 | 产品经理 |
@@ -44,21 +44,23 @@ StockSenate 的目标不是「再加几个 Agent」，而是把上述六项变�
 | 实盘交易、自动下单 | 代码中不存在下单/券商接口；`output_template.toml` 的 `forbidden_fields` 校验会拒绝 `order_id`/`broker_account`/`auto_order` |
 | 输出可执行价位 | 不产出建仓价、止损位、目标价、仓位比例；Trader 与 PM 只给方向、评级与理由 |
 | 荐股与投资建议 | README、报告页脚、WebUI 首屏统一声明；不托管服务、不代为分析 |
-| 重复实现数据采集 | 行情/财报/公告/研报/资金/风险事件一律经 DataAccessLayer 向 TickHub / Newsieve 或本地 Provider 取 |
+| 重复实现数据采集 | 行情/财报/公告/研报/资金/风险事件/资讯一律经 DataAccessLayer 向 TickHub 或本地 Provider 取 |
 | 用 LLM 记忆补数值 | 数据缺失标 `missing` 或 `degraded`，禁止生成数字 |
 | 从文本资料里抽数值 | `TextDocProvider` 只做定性阅读，`numeric_extraction = false` |
 
-### 2.3 与 TickHub / Newsieve 的职责边界
+### 2.3 与 TickHub 的职责边界
 
-| 能力 | StockSenate 核心 | WebUI | TickHub 底座 | Newsieve |
-|---|---|---|---|---|
-| 多角色分析、辩论、终审 | 实现 | 展示/操作 | — | — |
-| 回测、告警、报告 | 实现 | 展示/操作 | — | — |
-| 数据采集、缓存、代理池、降级 | 消费 | — | 实现 | 部分 |
-| 字段映射、风险事件结构化 | 消费 | 展示 | 实现 | 实现 |
-| 资讯抓取与过滤 | 消费 | 展示 | — | 实现 |
-| MCP 协议服务 | 实现 | — | 实现 | 实现 |
-| 运维监控面板 | — | 只读跳转 | 实现 | — |
+| 能力 | StockSenate 核心 | WebUI | TickHub 底座 |
+|---|---|---|---|
+| 多角色分析、辩论、终审 | 实现 | 展示/操作 | — |
+| 回测、告警、报告 | 实现 | 展示/操作 | — |
+| 数据采集、缓存、代理池、降级 | 消费 | — | 实现 |
+| 字段映射、风险事件结构化 | 消费 | 展示 | 实现 |
+| 资讯抓取与过滤（`news` / `social_buzz` / `policy_feed`） | 消费 | 展示 | 实现 |
+| MCP 协议服务 | 实现 | — | 实现 |
+| 运维监控面板 | — | 只读跳转 | 实现 |
+
+> Newsieve 在 PyPI 上不可获取（404），资讯三域自 2026-10-26 起由 TickHub-CN 的 `eastmoney_stock_news` / `cls_telegraph` / `cctv_news` 提供，见 DEC-009。
 
 原则：StockSenate **不直连**东财 / 巨潮 / 通达信 / 同花顺；WebUI 只做业务界面；MCP Server 与 WebUI 分进程，WebUI 不得污染 MCP stdio 的 stdout。
 
@@ -97,7 +99,7 @@ StockSenate 的目标不是「再加几个 Agent」，而是把上述六项变�
 | F-02 | `SenateGraph.propagate(code, date)` 保持 `(final_state, decision)` 返回 | 与上游签名一致；`TradingAgentsGraph` 别名可用 |
 | F-03 | DataAccessLayer + `DataEnvelope` 统一契约 | 六字段齐全；`freshness`/`confidence`/`data_source_status` 枚举受限 |
 | F-04 | 四种数据模式 `stockdata / local / hybrid / priority` | 按域优先级路由；回退留痕；全源失败返回 `missing` 而非抛栈 |
-| F-05 | TickHub-CN / TickHub-US / Newsieve 接入（MCP stdio 或本地 import） | 断网时可切本地；stdio 模式 stdout 纯净 |
+| F-05 | TickHub-CN / TickHub-US 接入（MCP stdio 或本地 import），资讯三域由 TickHub-CN 承担 | 断网时可切本地；stdio 模式 stdout 纯净 |
 | F-06 | 角色配置 `agent_roles.toml`，内置 7 + 自定义 5，上限 12 | 超限报错；工具权限按角色隔离 |
 | F-07 | 细粒度 `role_llms` | 上游 16 个合法键全支持；错键报错；同 provider+model 复用客户端 |
 | F-08 | 工作流可配 `workflow.toml` | 分析师可增删；轮数可调；不可跳过终审 |
@@ -216,3 +218,11 @@ ssenate analyze 600519 --date 2026-10-24
 3. 安全边界（不实盘、不产出价位、不泄露密钥、Webhook 验签、MCP 鉴权）由安全工程师独立复核。
 4. 与上游的兼容项（API 签名、CLI 旧命令、配置目录迁移、环境变量前缀）必须有自动化测试。
 5. 任一 P0 项缺失即不进入验收。
+
+---
+
+## 10. 变更记录
+
+| 日期 | 版本 | 变更 | 依据 |
+|---|---|---|---|
+| 2026-10-26 | v1.1 | 数据底座移除 Newsieve（PyPI 404，不可获取）；`news` / `social_buzz` / `policy_feed` 三域改由 TickHub-CN 提供；`[backtest]` extra 移除（回测为纯 Python，无 pandas/numpy import）；默认 LLM 所需 `openai` / `anthropic` 声明为必装依赖；`[mcp]` 下限提到 `mcp>=2` | QUOT-56、DEC-009 |

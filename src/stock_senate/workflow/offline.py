@@ -12,7 +12,8 @@ validated against the exact same Pydantic models.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 ANALYST_ROLE_HINTS = {
     "market": "价格与量能",
@@ -252,9 +253,7 @@ def research_argument(ctx: Mapping[str, Any]) -> dict[str, Any]:
     rebuttals: list[str] = []
     for report in opponents[:3]:
         for item in (report.get("key_points") or [])[:1]:
-            rebuttals.append(
-                f"对方关于「{item}」的论述尚未获得全部数据域验证，需保留保留意见。"
-            )
+            rebuttals.append(f"对方关于「{item}」的论述尚未获得全部数据域验证，需保留保留意见。")
     if not rebuttals:
         rebuttals.append("对方未给出可核验的反向证据。")
     total = max(1, len(bull) + len(bear))
@@ -320,7 +319,9 @@ def research_verdict(ctx: Mapping[str, Any]) -> dict[str, Any]:
 def trade_plan(ctx: Mapping[str, Any]) -> dict[str, Any]:
     verdict = dict(ctx.get("verdict") or {})
     stance = verdict.get("stance")
-    direction = {"bullish": "long", "bearish": "short", "neutral": "flat"}.get(str(stance), "unknown")
+    direction = {"bullish": "long", "bearish": "short", "neutral": "flat"}.get(
+        str(stance), "unknown"
+    )
     confidence = float(verdict.get("confidence") or 0.0)
     risks = list(verdict.get("unresolved") or [])[:4]
     if not risks:
@@ -387,7 +388,9 @@ def final_decision(ctx: Mapping[str, Any]) -> dict[str, Any]:
     for item in risks:
         risk_points.extend(list(item.get("points") or [])[:1])
     if not risk_points:
-        risk_points = list(verdict.get("unresolved") or [])[:3] or ["缺乏反向证据，结论稳定性待验证。"]
+        risk_points = list(verdict.get("unresolved") or [])[:3] or [
+            "缺乏反向证据，结论稳定性待验证。"
+        ]
     partial = stance == "unknown" or bool(verdict.get("partial"))
     return {
         "role": "portfolio_manager",
@@ -406,9 +409,20 @@ def final_decision(ctx: Mapping[str, Any]) -> dict[str, Any]:
 def quality_verdict(ctx: Mapping[str, Any]) -> dict[str, Any]:
     digest = ctx.get("digest") or {}
     domains = list(digest.get("domains") or {})
-    usable = [name for name in domains if (digest["domains"][name] or {}).get("status") != "missing"]
+    entries = digest.get("domains") or {}
+    fact_counts = {name: len((entries.get(name) or {}).get("facts") or []) for name in domains}
+    # Evidence is what the digest actually extracted, not what a provider
+    # claimed: an "ok" domain with zero facts is an empty shell and must not
+    # lift evidence coverage.
+    usable = [name for name in domains if fact_counts[name] > 0]
+    empty = [
+        name
+        for name in domains
+        if fact_counts[name] == 0 and (entries.get(name) or {}).get("status") != "missing"
+    ]
     missing = list(digest.get("missing") or [])
     evidence = 100.0 * len(usable) / max(1, len(domains))
+    total_facts = sum(fact_counts.values())
 
     citations = 0
     valid = 0
@@ -432,20 +446,31 @@ def quality_verdict(ctx: Mapping[str, Any]) -> dict[str, Any]:
 
     score = round(0.4 * evidence + 0.3 * citation_score + 0.3 * coherence, 1)
     threshold = float(ctx.get("threshold") or 70.0)
-    notes = [f"可用数据域 {len(usable)}/{len(domains)}，质量分 {score:.1f}。"]
+    partial = bool(empty)
+    notes = [
+        f"有事实的数据域 {len(usable)}/{len(domains)}（共 {total_facts} 条事实），"
+        f"质量分 {score:.1f}。"
+    ]
+    if empty:
+        notes.append("以下数据域状态可用但未抽出事实：" + "、".join(empty) + "。")
     if missing:
         notes.append("缺失数据域：" + "、".join(missing))
-    if score < threshold:
+    if partial:
+        notes.append("存在无事实的数据域，标记为 partial 并要求人工复核。")
+    elif score < threshold:
         notes.append(f"低于阈值 {threshold:.0f}，标记为 low_quality 并提示人工复核。")
     return {
         "role": "quality_gate",
-        "partial": False,
+        "partial": partial,
         "score": score,
-        "low_quality": score < threshold,
+        "low_quality": score < threshold or partial,
         "threshold": threshold,
         "dimensions": {
             "logic_coherence": {"score": coherence, "note": "分析—研究—交易—风险—终审链条完整度"},
-            "evidence_sufficiency": {"score": round(evidence, 1), "note": "可用数据域占比"},
+            "evidence_sufficiency": {
+                "score": round(evidence, 1),
+                "note": f"有事实的数据域占比（共 {total_facts} 条事实）",
+            },
             "citation_accuracy": {"score": round(citation_score, 1), "note": "可追溯引用的比例"},
         },
         "notes": " ".join(notes),

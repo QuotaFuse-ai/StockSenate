@@ -1,11 +1,15 @@
 # syntax=docker/dockerfile:1.7
 FROM python:3.12-slim AS base
 
+# STOCKSENATE_DEFAULTS_DIR: a non-editable install loses the repo-relative
+# defaults lookup, so point it at the config/ COPY below; otherwise containers
+# silently run on built-in defaults instead of the shipped toml files.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     STOCKSENATE_CONFIG_DIR=/app/config-dir \
-    STOCKSENATE_DATA_DIR=/app/data
+    STOCKSENATE_DATA_DIR=/app/data \
+    STOCKSENATE_DEFAULTS_DIR=/app/config
 
 WORKDIR /app
 
@@ -35,7 +39,7 @@ USER senate
 EXPOSE 8765 8788
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:${STOCKSENATE_SERVICE_PORT:-8788}/_stcore/health" || exit 1
+    CMD curl -fsS "http://127.0.0.1:${STOCKSENATE_WEBUI_PORT:-8788}/healthz" || exit 1
 
 ENTRYPOINT ["ssenate-entrypoint"]
 CMD ["webui"]

@@ -16,8 +16,14 @@ from stock_senate.data.providers.base import Provider, ProviderNotAvailable
 class CompositeProvider(Provider):
     kind = "composite"
 
-    def __init__(self, name: str, config: dict[str, Any] | None = None, *,
-                 home=None, children: list[Provider] | None = None) -> None:
+    def __init__(
+        self,
+        name: str,
+        config: dict[str, Any] | None = None,
+        *,
+        home=None,
+        children: list[Provider] | None = None,
+    ) -> None:
         super().__init__(name, config, home=home)
         if children is not None:
             self.children = list(children)
@@ -38,8 +44,9 @@ class CompositeProvider(Provider):
                 built.append(build_provider(str(child_name), child, home=self.home))
         return built
 
-    def fetch(self, domain: str, code: str, as_of: str,
-              params: dict[str, Any] | None = None) -> DataEnvelope:
+    def fetch(
+        self, domain: str, code: str, as_of: str, params: dict[str, Any] | None = None
+    ) -> DataEnvelope:
         failures: list[str] = []
         for child in self.children:
             if not child.supports(domain):
@@ -52,7 +59,8 @@ class CompositeProvider(Provider):
                 failures.append(f"{child.name}: {type(exc).__name__}: {exc}")
         raise ProviderNotAvailable(
             f"composite {self.name}: no child returned {domain}: "
-            + "; ".join(failures or ["no child supports the domain"]))
+            + "; ".join(failures or ["no child supports the domain"])
+        )
 
 
 __all__ = ["CompositeProvider"]
