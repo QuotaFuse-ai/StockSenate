@@ -18,7 +18,7 @@ StockSenate 自身只负责「多智能体合议 + 回测推演」。
 
 - **完整合议链路**：7 分析师 → 多空辩论 → 研究经理 → 交易员 → 三档风险辩论 → 投资经理终审 → 质量门控，节点与输出契约稳定。
 - **数据层独立**：议事层不直连东财/巨潮/通达信；`DataAccessLayer` 统一消费 `TickHub-CN`（A 股）、`TickHub-US`（美/港股）、`Newsieve`（资讯），也可离线读取本地 JSON、文本与 SQL。
-- **生产级增强**：Pydantic 输出强约束、单节点局部重试、辩论收敛、增量分析、安全护栏、HITL 审批、LLM-as-a-Judge、全链路追踪、任务熔断、告警引擎、批量队列、独立 WebUI、MCP Server。
+- **生产级增强**：Pydantic 输出强约束、单节点局部重试、辩论收敛、增量分析、上下文压缩、长期反思记忆、安全护栏、HITL 审批（CLI + WebUI）、LLM-as-a-Judge、全链路追踪、任务熔断、告警引擎、批量队列、独立 WebUI、MCP Server。
 - **一套环境装全部模型**：MiniMax / DeepSeek / Qwen / GLM / OpenAI / Anthropic / Google / xAI / OpenRouter / Ollama / OpenAI 兼容网关。
 
 > **定位边界**：本项目面向研究与教学，不构成投资建议，不提供荐股服务。
@@ -226,6 +226,16 @@ tradingagents analyze 600000     # 可用，启动时打印弃用警告并提示
 - 环境变量前缀 `STOCKSENATE_*`；同时兼容读取旧前缀 `TRADINGAGENTS_*`，新前缀优先。
 - 所有配置文件提供 JSON Schema 校验与迁移脚本（`ssenate config validate` / `ssenate config migrate`）。
 
+### 工作流增强开关（`config/workflow.toml`）
+
+| 能力 | 配置节 | 行为 |
+|---|---|---|
+| 上下文压缩 | `[compression]` | 超过 `trigger_tokens` 按证据单元切块压到 `chunk_tokens`，引用与来源字段原样保留；只影响远程模型调用，离线 provider 不经过压缩。 |
+| 长期反思记忆 | `[memory]` | 每次运行结束向 `memory/reflections.jsonl` 追加一条，下一次同标的分析注入最近 `max_entries` 条；追加式 JSONL，写入前过合规过滤。 |
+| 质量门 | `[quality_gate]` | `mode = rules / judge / hybrid`；`judge` 与 `hybrid` 调用评审角色按 rubric 打分，模型不可用时回退 `rules` 并注明原因。 |
+| 追踪导出 | `[tracing]` | 默认关闭；`exporter = jsonl / otlp`。`otlp` 兼容 OpenTelemetry Collector 与 Langfuse，鉴权头从 `headers_env` 指定的环境变量读取，不落配置文件。 |
+| 人工审批 | `[hitl]` | 检查点可在 CLI 终端或 WebUI「审批」页处理；非交互环境按 `on_timeout` 放行，并在报告与审计中留痕。 |
+
 ---
 
 ## 数据接入
@@ -273,7 +283,7 @@ ssenate webui --host 127.0.0.1 --port 8788
 ```
 
 独立进程、独立端口、独立鉴权；默认只监听本机，未配置鉴权令牌时拒绝写操作。
-页面：分析工作台、辩论过程、最终报告、历史记录、报告 Diff、回测中心、告警面板、角色管理、工作流拓扑、批量队列、配置校验、数据状态只读卡。
+页面：分析工作台、辩论过程、最终报告、历史记录、报告 Diff、回测中心、告警面板、角色管理、工作流拓扑、批量队列、人工审批、配置校验、数据状态只读卡。
 
 运维监控不在本界面重复建设，只做只读展示并跳转数据底座控制台（默认 `:8787`）。
 
@@ -338,10 +348,8 @@ python -m build
 ```
 
 测试口径：`pytest` 只依赖 `.[dev]`，不安装任何可选 extra，也不需要外部服务、网络或
-API Key；用例全部走本地 fixture 与 offline provider。在 Python 3.12 的全新 venv（仅装
-`.[dev]`，无 `tickhub-cn`）中 273 例、272 passed；唯一红灯是 `--date 2026-13-99` 未按
-约定返回 exit 2（后端日期校验缺陷，测试已按契约写死）。Windows 传统控制台
-（`PYTHONIOENCODING=cp1252`）下 `role list --output json` 依然输出 UTF-8 JSON。
+API Key；用例全部走本地 fixture 与 offline provider，当前 341 例全部通过。
+Windows 传统控制台（`PYTHONIOENCODING=cp1252`）下 `role list --output json` 依然输出 UTF-8 JSON。
 
 CI 覆盖：`pytest` + `ruff` + `mypy` + `pip-audit` + 全提供商同环境 import smoke test + 打包检查。
 依赖锁定使用 `uv.lock`；发布包只声明最小依赖范围。
