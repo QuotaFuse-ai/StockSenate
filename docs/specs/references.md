@@ -14,8 +14,7 @@ python scripts/check_links.py --offline       # 离线跳过（等价于 STOCKSE
 | 项目主页 / 仓库 | https://github.com/QuotaFuse-ai/StockSenate | 独立官网尚未上线，暂以仓库主页作为官网入口 |
 | Issues | https://github.com/QuotaFuse-ai/StockSenate/issues | 缺陷与需求跟踪 |
 | Releases | https://github.com/QuotaFuse-ai/StockSenate/releases | 版本标签与构建产物 |
-
-PyPI 项目页（`https://pypi.org/project/stocksenate/`）在首次发布后才会生成，当前不可访问，因此不以超链接形式列出；发布后请补录。
+| PyPI 项目页 | https://pypi.org/project/stocksenate/ | 发行包入口（0.1.0 起，wheel + sdist） |
 
 ## 研究语境与许可证
 
