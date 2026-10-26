@@ -14,6 +14,8 @@
 
 > 更新记录：2026-10-26 QUOT-56 修复后刷新：compose 健康检查路径、事实抽取与覆盖计分、退出码 0/2/3/4/7/8、安装 extras。Newsieve 移除见 DEC-009。
 
+> 更新记录：2026-10-26 QUOT-57：新增真实数据形态回归（`tests/fixtures/tickhub/` + `tests/test_tickhub_fixture_regression.py`）、弱模型/预算/HITL 专项（`tests/test_resilience.py`）与报告 diff 专项（`tests/test_report_diff.py`）；5 处仍无自动化测试的缺口集中登记于 §二十一。
+
 ---
 
 ## 一、项目基础信息（v1.1/v1.2 §1）
@@ -38,13 +40,13 @@
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
 | 2.1 | A 股规则：T+1、涨跌停、最小手数、交易时段、ST、CSI300 基准 | `workflow/constraints.py`、`backtest/` | analyze / backtest | 约束单测（涨停不可买、T+1 不可卖） | P0 | 已实现（`test_backtest`） |
-| 2.1 | 快/深双模型分层 + 多 provider | `config/llm_config.toml`、`roles/resolver.py` | `role_llms` | 同 provider+model 复用客户端 | P0 | 已实现（`llm_config.toml` + `roles/llm.py`） |
+| 2.1 | 快/深双模型分层 + 多 provider | `config/llm_config.toml`、`roles/resolver.py` | `role_llms` | 同 provider+model 复用客户端 | P0 | 已实现（`llm_config.toml` + `roles/llm.py`；真实 LLM 全链路无测试，见 §二十一） |
 | 2.1 | `performance` 是事后归因，不是回测 | `report/performance.py` | `ssenate performance` | 命令描述与报告字段不含净值/收益曲线 | P0 | 已实现（`test_cli`） |
 | 2.1 | Claude Agent SDK 订阅模式 | `roles/resolver.py` 的 `claude_agent_sdk` provider | 配置 | 冒烟：无 `ANTHROPIC_API_KEY` 时按订阅凭据启动 | P2 | 待实现（未提供该 provider） |
 | 2.2 | `propagate` 返回值不可被报告文件替代 | `graph/senate_graph.py` | Python API | 测试只读返回值即可断言决策 | P0 | 已实现（签名/返回契约） |
 | 2.2 | 角色模型配置必须细粒度，不能只有两级 | `config/llm_config.toml` | `role_llms` | 16 个合法键 + 错键报错 | P0 | 已实现 |
 | 2.2 | 回测与 `performance` 分开描述、分开验收 | `PRD.md` §4/F-24、`docs/specs/cli-reference.md` | CLI | 两份验收清单独立 | P0 | 已实现 |
-| 2.2 | 数据迁移是架构重构，保留迁移期兼容开关 | `config/data_source.toml` `mode` | 配置 | `mode=local` 时完全不依赖 TickHub | P0 | 已实现（`local` 模式断网跑通） |
+| 2.2 | 数据迁移是架构重构，保留迁移期兼容开关 | `config/data_source.toml` `mode` | 配置 | `mode=local` 时完全不依赖 TickHub | P0 | 部分实现（`local` 模式断网跑通；本行口径收窄为「已覆盖域」：kline/financial/announcement/research/risk_event 有真实形态夹具，money_flow/lockup_calendar 仅有 TickHub 抽取夹具。quote/news/social_buzz/money_flow/dragon_tiger/lockup_calendar 六域仍缺本地归档形态夹具，无测试，见 §二十一） |
 | 2.2 | 对外表述延续「研究框架非产品」 | `README.md`、`PRD.md` §2 | 文档 | 无荐股/收益承诺措辞 | P0 | 已实现 |
 
 ## 三、总体架构（§3）
@@ -74,7 +76,7 @@
 | 5.3 | Issue 105②：完整告警体系（三级/去重/状态机/Webhook 重试签名幂等） | `alerts/engine.py` | `ssenate alert` | 去重、重试、验签、幂等四项单测 | P1 | 已实现（`test_alerts` 31 例） |
 | 5.4 | Issue 105③：选股代码统一去重 | `screening/dedup.py` | Python API | 多策略候选合并后代码唯一 | P1 | 已实现（`test_screening`） |
 | 5.5 | httpx 冲突彻底解决 | `pyproject.toml`、`docs/decisions/DEC-007` | 安装 | 依赖树不含冲突组合；`[google]` 不提供 | P0 | 已实现 |
-| 5.6 | 弱模型 tool-calling 空报告 → Schema 强约束 | `workflow/nodes/base.py`、`roles/schemas.py` | analyze | 空输出被标 `partial` 且重试，不静默消失 | P0 | 已实现（`roles/schemas.py` 强约束 + partial） |
+| 5.6 | 弱模型 tool-calling 空报告 → Schema 强约束 | `workflow/nodes/base.py`、`roles/schemas.py` | analyze | 空输出被标 `partial` 且重试，不静默消失 | P0 | 已实现（`roles/schemas.py` 强约束 + partial；空输出重试恢复、重试耗尽抛 `LLMUnavailable`、角色跳过并标 `partial` 见 `tests/test_resilience.py`） |
 | 5.7 | 30~50 次调用 → 增量分析 | `workflow/incremental.py` | 配置 / analyze | 二次分析 token 显著下降 | P1 | 待实现（无增量分析模块） |
 | 5.8 | 配置分散 → 统一 toml + Schema 校验 | `config/*.toml`、`config/schema.py` | `ssenate config validate` | 错误定位到文件与键 | P0 | 已实现 |
 | 5.9 | 日志弱 → 结构化日志（stdout/stderr 分离、脱敏、多 sink） | `observability/logging.py` | 全部入口 | stdout 无日志；API key 被脱敏 | P0 | 部分实现（`observability/logging.py`：stdout 纯净、字段脱敏、stderr 结构化；已支持轮转 file sink（`[logging]`，默认关闭，见 `test_logging_sink`），sqlite/mysql/postgres sink 仍待实现） |
@@ -97,7 +99,7 @@
 |---|---|---|---|---|---|---|
 | 7.1 | 不在本组件实现采集/缓存/代理/降级 | `README.md` §职责边界 | — | 代码扫描无采集实现 | P0 | 已实现 |
 | 7.2 | Provider：TickHub-CN / TickHub-US / JSON / TextDoc / SQL / Composite | `data/providers/` | `data_source.toml` | 每个 provider 有契约测试 | P0 | 已实现（六类 provider 齐全；Newsieve 已移除，资讯三域由 TickHub-CN 承担） |
-| 7.2 | MCP stdio 与本地 import 双通道 | `data/providers/tickhub.py` | 配置 | 两种通道结果一致 | P0 | 已实现（`data/providers/tickhub.py`） |
+| 7.2 | MCP stdio 与本地 import 双通道 | `data/providers/tickhub.py` | 配置 | 两种通道结果一致 | P0 | 部分实现（本地 import 通道已覆盖；TickHub 端 stdio MCP 通道无测试，见 §二十一） |
 | 7.3 | `DataEnvelope` 十字段：domain/code/data_as_of/payload/source/source_detail/fetched_at/freshness/confidence/data_source_status | `data/envelope.py` | Python API / MCP | 字段与枚举单测；缺字段构造失败 | P0 | 已实现（`data/envelope.py`） |
 | 7.4 | 四模式 `stockdata/local/hybrid/priority` + 按域优先级 | `data/router.py` | 配置 / analyze | 每模式一条集成测试 | P0 | 已实现（`local` 集成测试；其余模式单测待补） |
 | 7.5 | 实时取数走 TickHub，不直连免费源 | `data/providers/tickhub.py` | analyze | 网络请求只发往 provider 端点 | P0 | 已实现（网络请求只发往 provider 端点） |
@@ -110,7 +112,7 @@
 
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
-| 8.1 | 默认 7 分析师行为不变 | `config/agent_roles.toml` | analyze | 回归基线报告 diff 为空 | P0 | 已实现（7 内置角色离线全链路跑通；基线 diff 待补） |
+| 8.1 | 默认 7 分析师行为不变 | `config/agent_roles.toml` | analyze | 回归基线报告 diff 为空 | P0 | 已实现（7 内置角色离线全链路跑通；diff 机制见 `tests/test_report_diff.py`，固定基线快照回归未建） |
 | 8.2 | 自定义角色需定义六项：提示词/工具白名单/Schema/模型层级/阶段/辩论权重 | `config/agent_roles.toml`、`roles/registry.py` | 配置 | 缺任一字段校验报错 | P0 | 已实现（`roles/registry.py` 校验字段/别名/席位） |
 | 8.2 | 角色键与 `role_llms` 键对齐，别名归一 | `config/schema.py`、`docs/decisions/DEC-005` | 配置 | `technical/basic/sentiment/unlock` 可用且归一 | P0 | 已实现 |
 | 8.3 | `workflow.toml` 节点/边可配；新增角色不改默认拓扑 | `config/workflow.toml` | 配置 | 启用自定义角色后默认 7 角色回归通过 | P1 | 骨架（轮次/阈值/HITL 可配；任意节点/边拓扑未实现） |
@@ -129,8 +131,8 @@
 | 9 | WebUI 可编辑角色/工作流/模板，写操作审计 | `webui/pages/settings.py` | WebUI | 每次写入产生审计记录 | P2 | 部分实现（仅角色启停 `POST /settings/roles` 可写并留痕；工作流/模板为只读。可编辑与全量写审计保留为待实现） |
 | 9.1 | 短期记忆用图状态；长期反思入 PGVector；同标的检索注入 | `workflow/memory.py`、`observability/reflection.py` | analyze | 可关闭；不跨标的污染 | P1 | 待实现（无 memory 模块） |
 | 9.2 | 防 Prompt 注入清洗层 + 合规过滤 | `data/sanitize.py`、`workflow/guardrails.py` | 全部输入 | 注入样本不改变系统行为 | P0 | 已实现（`data/sanitize.py`；`tests/test_external_sanitization.py` 4 类注入样本 × 参数化断言：清洗发生在摘要与提示词之前、清洗留痕、良性文本不动、所有 provider 统一包裹） |
-| 9.3 | HITL 两个强制挂起点，支持同意/驳回/修改/超时 | `workflow/hitl.py` | analyze / WebUI | 四种动作各一测；自动放行留痕 | P0 | 已实现（`workflow/hitl.py`） |
-| 9.4 | LLM-as-a-Judge 三维评分，<70 标 `low_quality` | `workflow/judge.py` | analyze / 报告 | 低分报告被标记且 WebUI 高亮 | P1 | 部分实现（`workflow/nodes/quality.py` 规则式三维质量门，<70 标 `low_quality`，数据覆盖按事实数计分、0 事实域不计覆盖；LLM-as-a-Judge 未实现，保留为待实现） |
+| 9.3 | HITL 两个强制挂起点，支持同意/驳回/修改/超时 | `workflow/hitl.py` | analyze / WebUI | 四种动作各一测；自动放行留痕 | P0 | 已实现（`workflow/hitl.py`；同意/驳回/修改、超时 `auto_approve`/`abort`、未启用跳过与自动放行留痕见 `tests/test_resilience.py`） |
+| 9.4 | LLM-as-a-Judge 三维评分，<70 标 `low_quality` | `workflow/judge.py` | analyze / 报告 | 低分报告被标记且 WebUI 高亮 | P1 | 部分实现（`workflow/nodes/quality.py` 规则式三维质量门，<70 标 `low_quality`，数据覆盖按事实数计分、0 事实域不计覆盖；`tests/test_digest_quality.py`、`tests/test_tickhub_fixture_regression.py` 覆盖“ok 但 0 事实不计覆盖”与报告头/页脚一致性；LLM-as-a-Judge 未实现，保留为待实现） |
 | 9.5 | Map-Reduce 上下文压缩 | `workflow/compress.py` | analyze | 超阈值触发；引用不丢 | P1 | 待实现（无 compress 模块） |
 | 9.6 | OpenTelemetry / Langfuse 追踪 + trace_id | `observability/tracing.py` | 全部入口 | 一次运行的日志/span/用量同 id | P1 | 待实现（trace_id 已贯穿，未接 OTel/Langfuse） |
 
@@ -180,7 +182,7 @@
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
 | 14 | 每次分析保存结构化快照 | `report/store.py` | analyze | 快照可重放渲染 | P0 | 已实现（`test_webui_parity`） |
-| 14 | 字段级 diff：差异/结论变化/风险变化 | `report/diff.py` | `report diff` | 构造两次运行断言 diff | P0 | 已实现（`report/diff.py`；专项测试待补） |
+| 14 | 字段级 diff：差异/结论变化/风险变化 | `report/diff.py` | `report diff` | 构造两次运行断言 diff | P0 | 已实现（`report/diff.py`；字段/风险与理由集合/分析师立场/结论方向、同日选最新快照与 CLI 参数校验见 `tests/test_report_diff.py`） |
 | 14 | 增量分析：新标的全流程，重复标的只拉新增 + 注入历史摘要 | `workflow/incremental.py` | analyze | token 下降且结论一致 | P1 | 待实现 |
 | 14 | 四种输出：精简结论/完整辩论/风险清单/Diff 摘要 | `output_template.toml`、`report/render.py` | `report export` | 四种格式均可导出 | P1 | 已实现（md/json 实测；pdf/docx 缺 extra 时降级为 md） |
 | 14 | WebUI 报告/Diff/历史页面 | `webui/pages/` | WebUI | 三页可操作 | P1 | 已实现（`test_webui`） |
@@ -189,7 +191,7 @@
 
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
-| 15 | 三道上限（调用/token/超时）+ 优雅退出 | `config/budget.toml`、`workflow/budget.py` | 配置 | 命中后交付部分结果并标 `partial` | P0 | 已实现（`workflow/budget.py`，部分结果标 partial） |
+| 15 | 三道上限（调用/token/超时）+ 优雅退出 | `config/budget.toml`、`workflow/budget.py` | 配置 | 命中后交付部分结果并标 `partial` | P0 | 已实现（`workflow/budget.py`，部分结果标 partial；调用/token/墙钟三道上限、配置读取与图级 `budget_tripped` 见 `tests/test_resilience.py`） |
 | 15 | 队列：并发、限速、失败重试/跳过、进度查询 | `queue/manager.py` | `queue status/submit` | 50 任务并发 3 跑通 | P1 | 已实现（`test_queue`） |
 | 15 | 与底座限流/缓存/防重复锁协同 | `queue/locks.py` | 配置 | 同标的不并发重复分析 | P1 | 已实现（`queue/locks.py`） |
 | 15 | 暂停/恢复/取消 | `queue/manager.py` | CLI / WebUI | 三操作各一测 | P1 | 已实现（`test_queue`） |
@@ -220,9 +222,9 @@
 
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
-| 18.1 | 测试类型：单元/契约/集成/E2E/回归/安全 | `tests/`、`.github/workflows/ci.yml` | CI | 六类目录与用例存在 | P0 | 已实现（单元/契约/集成/安全边界；浏览器 E2E 未跑） |
+| 18.1 | 测试类型：单元/契约/集成/E2E/回归/安全 | `tests/`、`.github/workflows/ci.yml` | CI | 六类目录与用例存在 | P0 | 部分实现（单元/契约/集成/安全边界；新增真实形态回归 `tests/test_tickhub_fixture_regression.py`；浏览器 E2E 无测试，见 §二十一） |
 | 18.2 | 18 项新增能力逐项验收 | 本文件 F-01…F-31 | — | 逐项打勾 | P0 | 已验收（QUOT-61：F-14…F-31 共 18 项 → 12 通过 / 3 部分通过 / 3 未通过；逐项证据见 `docs/tasks/TASK-QUOT-61/acceptance-report.md`。未通过 F-18 压缩、F-19 Agent Memory、F-29 增量分析仅存配置无运行时代码，去向见报告 §5 遗留清单） |
-| 18.3 | 部署：pip / Docker / compose | `Dockerfile`、`docker-compose.yml` | 部署 | compose 两个服务可起 | P2 | 已实现（WSL2 Ubuntu 24.04 + Docker 29.1.3 / Compose 2.40.3 真实 `docker compose up -d`：webui 与 mcp 均 healthy，8788/8765 `/healthz` 返回 200；实测修掉两处阻塞：`# syntax` 指令拉取前端镜像卡死已移除、容器绑定 0.0.0.0 时两个进程要求 `STOCKSENATE_WEBUI_PASSWORD` / `STOCKSENATE_MCP_TOKEN` 已在 compose 与 `.env.example` 标明必填；未设口令时 webui 303 跳登录页、mcp 无 token 401） |
+| 18.3 | 部署：pip / Docker / compose | `Dockerfile`、`docker-compose.yml` | 部署 | compose 两个服务可起 | P2 | 部分实现（WSL2 Ubuntu 24.04 + Docker 29.1.3 / Compose 2.40.3 人工 `docker compose up -d`：webui 与 mcp 均 healthy，8788/8765 `/healthz` 返回 200；实测修掉两处阻塞：`# syntax` 指令拉取前端镜像卡死已移除、容器绑定 0.0.0.0 时两个进程要求 `STOCKSENATE_WEBUI_PASSWORD` / `STOCKSENATE_MCP_TOKEN` 已在 compose 与 `.env.example` 标明必填；未设口令时 webui 303 跳登录页、mcp 无 token 401。镜像构建与双服务启动无自动化测试，见 §二十一） |
 | 18.4 | 边界约束：不实盘、不产出价位、不泄露密钥 | 全仓库 | — | 安全工程师复核清单 | P0 | 已实现（`execution=false`、无价位字段、日志脱敏） |
 | 18.5 | 里程碑 M0–M4 与退出标准 | `PRD.md` §8 | — | 每个里程碑有验收脚本 | P0 | 已实现（M0–M3 有自动化验收；M4 未开始） |
 
@@ -240,6 +242,20 @@
 | 20 | CLI 名称 `ssenate` 无冲突（避开 `ss`/`sc`） | `docs/decisions/DEC-001` | Windows/Linux 双平台检查 | P0 | 已核验（文档记录） |
 | 20 | 端口 8788/8765 未被 TickHub/Wire 占用 | `DEC-003` | `netstat` 检查 | P0 | 已核验（2026-10-26 本机 netstat 无占用） |
 | 20 | Apache-2.0 归属与 NOTICE 完整 | `NOTICE` | 法务复核 | P0 | 已实现 |
+
+---
+
+## 二十一、无自动化测试的缺口（QUOT-57 登记）
+
+以下五项在本仓库没有任何自动化用例覆盖；其中 compose 有一次性人工验证记录，其余完全未执行。这里如实登记为「无测试」，不用 `skip` 或放宽断言掩盖。
+
+| # | 缺口 | 关联行 | 现状 | 为什么 CI 覆盖不了 | 补测建议 |
+|---|---|---|---|---|---|
+| G-01 | compose 真实构建 + 双服务启动 | 18.3、1.3 | 人工在 WSL2 跑通过一次；无自动化 | CI runner 无 Docker daemon（或需特权），构建耗时且依赖外网镜像 | 独立 job：`docker compose build` → `up -d` → 轮询 8788/8765 `/healthz` → `down -v`；失败时倾倒容器日志 |
+| G-02 | 真实 LLM 全链路 | 2.1、18.1 | 全程 offline/stub；只测了协议与降级 | 需要真实 API Key，成本与稳定性不可控 | 手动 nightly：一个 provider、一个标的、断言 `execution=false` 与 schema 合法，结果归档不进 main CI |
+| G-03 | TickHub stdio MCP 通道 | 7.2、10 | 只测本地 import 通道 | 需要可启动的 TickHub MCP 进程与凭据 | 契约测试：以假 MCP server 走 stdio，断言请求/响应帧与 import 通道结果一致 |
+| G-04 | 浏览器 E2E | 18.1、16.3 | WebUI 仅 TestClient 级用例 | 需要浏览器与 Playwright 依赖，CI 时间与 flake 成本高 | 独立 job：Playwright 起 `ssenate webui`，点击分析→报告→diff 主路径，产物附截图 |
+| G-05 | local 模式六域缺本地归档夹具 | 2.2、7.4 | quote/news/social_buzz/money_flow/dragon_tiger/lockup_calendar 无真实形态本地夹具 | 现有夹具是通用 `items` 占位，抽取路径未被真实载荷驱动 | 按 `tests/fixtures/tickhub/` 的方式补六域真实载荷，并断言 local 路由下各域 `fact_count` 行为 |
 
 ---
 

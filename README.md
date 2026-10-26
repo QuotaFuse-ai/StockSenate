@@ -342,6 +342,11 @@ mypy src
 python -m build
 ```
 
+测试口径：`pytest` 只依赖 `.[dev]`，不安装任何可选 extra，也不需要外部服务、网络或
+API Key；用例全部走本地 fixture 与 offline provider。在 Python 3.12 的干净 venv 中
+为 272 passed（约 22s）。Windows 传统控制台（`PYTHONIOENCODING=cp1252`）下
+`role list --output json` 依然输出 UTF-8 JSON。
+
 CI 覆盖：`pytest` + `ruff` + `mypy` + `pip-audit` + 全提供商同环境 import smoke test + 打包检查。
 依赖锁定使用 `uv.lock`；发布包只声明最小依赖范围。
 

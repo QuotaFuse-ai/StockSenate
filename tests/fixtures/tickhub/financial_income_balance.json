@@ -1,0 +1,26 @@
+{
+  "code": "600519",
+  "periods": 2,
+  "income": [
+    {
+      "report_name": "2026年三季报",
+      "report_date": "2026-09-30",
+      "revenue": 123120000000.0,
+      "net_profit": 60828000000.0
+    },
+    {
+      "report_name": "2026年中报",
+      "report_date": "2026-06-30",
+      "revenue": 81230000000.0,
+      "net_profit": 40110000000.0
+    }
+  ],
+  "balance": [
+    {
+      "report_date": "2026-09-30",
+      "total_assets": 312400000000.0,
+      "total_equity": 268900000000.0,
+      "cash": 198600000000.0
+    }
+  ]
+}

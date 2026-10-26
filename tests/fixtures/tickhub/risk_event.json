@@ -1,0 +1,24 @@
+{
+  "code": "600519",
+  "total": 3,
+  "events": [
+    {
+      "title": "股东减持计划期限届满",
+      "date": "2026-10-21",
+      "severity": "high",
+      "type": "减持"
+    },
+    {
+      "title": "收到监管工作函",
+      "date": "2026-09-28",
+      "severity": "mid",
+      "type": "监管"
+    },
+    {
+      "title": "副总经理辞职",
+      "date": "2026-08-12",
+      "severity": "low",
+      "type": "人事"
+    }
+  ]
+}
