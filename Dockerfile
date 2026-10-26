@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 FROM python:3.12-slim AS base
 
 # STOCKSENATE_DEFAULTS_DIR: a non-editable install loses the repo-relative
