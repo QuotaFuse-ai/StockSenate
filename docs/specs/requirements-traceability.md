@@ -55,17 +55,17 @@
 | 3 | 图执行层与数据层分离，DataAccessLayer 为唯一取数入口 | `src/stock_senate/data/` | Python API | 代码扫描：节点不直接 import provider | P0 | 已实现（节点只经 `DataAccessLayer` 取数） |
 | 3 | 本地 JSON / 文本 / SQL 可插拔 | `data/providers/*` | `data_source.toml` | 四种 provider 各有单测 | P1 | 已实现（provider 齐全；各 provider 独立契约测试待补） |
 
-## 四、原版能力 100% 复现清单（§4）
+## 四、基础能力清单（§4）
 
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
-| 4 | 原版 CLI 子命令与参数语义 | `cli.py` | `ssenate` | 命令清单与 `cli-reference.md` 一致 | P0 | 已实现（`test_cli`） |
-| 4 | 原版报告五分区 + `summary.json` + `complete_report.md` | `report/render.py` | analyze / report | 文件存在且字段齐全 | P0 | 已实现（`test_webui_parity`） |
-| 4 | 原版 Streamlit 交互与实时进度 | `webui/` | WebUI | 进度面板随节点更新 | P1 | 已实现（Starlette 替代，见 DEC-008） |
-| 4 | 原版 LangGraph checkpoint 可恢复 | `workflow/checkpoint.py` | 配置 | 中断后续跑不重复调用已完成节点 | P1 | 待实现（未接入 checkpoint 恢复） |
-| 4 | 原版 `data_vendors` 配置语义 | `config/data_source.toml` | 配置 | 旧 `data_vendors` 键映射并告警 | P1 | 待实现（未实现旧键映射） |
+| 4 | CLI 子命令与参数语义 | `cli.py` | `ssenate` | 命令清单与 `cli-reference.md` 一致 | P0 | 已实现（`test_cli`） |
+| 4 | 报告五分区 + `summary.json` + `complete_report.md` | `report/render.py` | analyze / report | 文件存在且字段齐全 | P0 | 已实现（`test_webui_parity`） |
+| 4 | WebUI 交互与实时进度 | `webui/` | WebUI | 进度面板随节点更新 | P1 | 已实现（Starlette 实现，见 DEC-008） |
+| 4 | LangGraph checkpoint 可恢复 | `workflow/checkpoint.py` | 配置 | 中断后续跑不重复调用已完成节点 | P1 | 待实现（未接入 checkpoint 恢复） |
+| 4 | `data_vendors` 配置语义 | `config/data_source.toml` | 配置 | 旧 `data_vendors` 键映射并告警 | P1 | 待实现（未实现旧键映射） |
 
-## 五、原版 Issue 100% 解决（§5）
+## 五、Issue 闭环清单（§5）
 
 | 章节 | 要求 | 实现位置 | 对外表面 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|---|
@@ -78,8 +78,8 @@
 | 5.7 | 30~50 次调用 → 增量分析 | `workflow/incremental.py` | 配置 / analyze | 二次分析 token 显著下降 | P1 | 待实现（无增量分析模块） |
 | 5.8 | 配置分散 → 统一 toml + Schema 校验 | `config/*.toml`、`config/schema.py` | `ssenate config validate` | 错误定位到文件与键 | P0 | 已实现 |
 | 5.9 | 日志弱 → 结构化日志（stdout/stderr 分离、脱敏、多 sink） | `observability/logging.py` | 全部入口 | stdout 无日志；API key 被脱敏 | P0 | 部分实现（`observability/logging.py`：stdout 纯净、字段脱敏、stderr 结构化；多 sink 仅 stderr，file/sqlite/mysql/postgres 未实现——file 已排期 QUOT-60，其余保留待实现） |
-| 5.10 | 无 CI → 补全 CI | `.github/workflows/ci.yml` | CI | lint + type + test + audit 全绿 | P0 | 进行中（本机 192 通过并已推送；CI 已运行：lint/typecheck/audit/dependency-isolation 与 windows 3.11/3.12 通过，**ubuntu 3.11/3.12 pytest 失败**，定位与修复已排期 QUOT-59） |
-| 5.11 | 无 lock file → 依赖锁定 | `uv.lock` | 安装 | CI 用 `uv sync --frozen` | P1 | 待实现（仓库无 `uv.lock`；已排期 QUOT-59） |
+| 5.10 | 无 CI → 补全 CI | `.github/workflows/ci.yml` | CI | lint + type + test + audit 全绿 | P0 | 已实现（根因：GitHub Actions 下 Typer 强制 Rich 终端渲染，`OptionHighlighter` 把 `--start` 拆成 `-` + `-start` 两段 ANSI，断言看不到连续原文；测试子进程加 `_TYPER_FORCE_DISABLE_TERMINAL=1`，未用 skipif、未改断言。合并 main 后另修两处基线问题：`from tests.cli_support` 在裸 `pytest` 下不可导入（`pyproject.toml` 声明 `pythonpath=["."]`）、MCP stdio 用例 EOF 竞态（先读两条响应再关 stdin）；本地 225 passed 连跑 5 次，PR CI run `40291436449` 十个 job 全绿） |
+| 5.11 | 无 lock file → 依赖锁定 | `uv.lock` | 安装 | CI 用 `uv sync --frozen` | P1 | 已实现（uv 0.13.5 解析 107 包；CI 新增 lockfile job：`uv sync --frozen --extra dev` + `uv run --frozen pytest`；合并 main 后干净 venv 从 lock 安装 225 通过，lockfile job 在 run `40291436449` 为 success） |
 | 5.12 | 英文文档不一致 → 修复 | `README.md`、`docs/` | 文档 | 中英文命令与配置键一致 | P2 | 已实现 |
 
 ## 六、新增功能与里程碑映射（§6）
@@ -213,7 +213,7 @@
 | 17 | `pip install stocksenate`，Python ≥3.11 | `pyproject.toml` | 安装 | 干净环境安装成功 | P0 | 已实现（QUOT-56：干净 venv `pip install .` 后 `ssenate --version` / 离线 `analyze` 通过） |
 | 17 | extras `[stockdata] [mcp] [webui] [all]` | `pyproject.toml` | 安装 | 每个 extra 单独可装 | P0 | 已实现（`[backtest]` 已移除：回测无 pandas/numpy import，见 DEC-009） |
 | 17 | 不提供 `[google]`，httpx 冲突解法写进文档 | `pyproject.toml`、`README.md`、DEC-007 | 文档 | 依赖树无冲突 | P0 | 已实现 |
-| 17 | `python -m build` + `twine upload` | `.github/workflows/release.yml` | CI | `twine check` 通过 | P1 | 待实现（无 release workflow；已排期 QUOT-59） |
+| 17 | `python -m build` + `twine upload` | `.github/workflows/release.yml` | CI | `twine check` 通过 | P1 | 已实现（tag `v*` 触发：build → `twine check` → artifact → Trusted Publishing 上传；publish job 使用 `environment: pypi` + `id-token: write`，由 PyPI 签发短期凭据，不需要 `PYPI_API_TOKEN` 或任何仓库 secret，见 DEC-011） |
 | 17 | NOTICE / LICENSE / Apache-2.0 归属 | `LICENSE`、`NOTICE` | 仓库 | 发布包内含两文件 | P0 | 已实现 |
 
 ## 十八、测试、部署、边界与里程碑（§18）
@@ -222,15 +222,15 @@
 |---|---|---|---|---|---|---|
 | 18.1 | 测试类型：单元/契约/集成/E2E/回归/安全 | `tests/`、`.github/workflows/ci.yml` | CI | 六类目录与用例存在 | P0 | 已实现（单元/契约/集成/安全边界；浏览器 E2E 未跑） |
 | 18.2 | 18 项新增能力逐项验收 | 本文件 F-01…F-31 | — | 逐项打勾 | P0 | 进行中（已排期 QUOT-61） |
-| 18.3 | 部署：pip / Docker / compose | `Dockerfile`、`docker-compose.yml` | 部署 | compose 两个服务可起 | P2 | 骨架（健康检查已对齐 `/healthz`，mcp 依赖 webui `service_healthy`；本机无 Docker，未做真实 `up` 验证，已排期 QUOT-59） |
+| 18.3 | 部署：pip / Docker / compose | `Dockerfile`、`docker-compose.yml` | 部署 | compose 两个服务可起 | P2 | 已实现（WSL2 Ubuntu 24.04 + Docker 29.1.3 / Compose 2.40.3 真实 `docker compose up -d`：webui 与 mcp 均 healthy，8788/8765 `/healthz` 返回 200；实测修掉两处阻塞：`# syntax` 指令拉取前端镜像卡死已移除、容器绑定 0.0.0.0 时两个进程要求 `STOCKSENATE_WEBUI_PASSWORD` / `STOCKSENATE_MCP_TOKEN` 已在 compose 与 `.env.example` 标明必填；未设口令时 webui 303 跳登录页、mcp 无 token 401） |
 | 18.4 | 边界约束：不实盘、不产出价位、不泄露密钥 | 全仓库 | — | 安全工程师复核清单 | P0 | 已实现（`execution=false`、无价位字段、日志脱敏） |
 | 18.5 | 里程碑 M0–M4 与退出标准 | `PRD.md` §8 | — | 每个里程碑有验收脚本 | P0 | 已实现（M0–M3 有自动化验收；M4 未开始） |
 
-## 十九、参考链接汇总（§19）
+## 十九、外部链接汇总（§19）
 
 | 章节 | 要求 | 实现位置 | 验收方式 | 优先级 | 状态 |
 |---|---|---|---|---|---|
-| 19 | 逐项核验官网/规范链接可访问、许可证一致 | `docs/specs/references.md`（测试工程师补全） | 链接检查脚本 | P2 | 待实现（已排期 QUOT-59） |
+| 19 | 逐项核验官网/规范链接可访问、许可证一致 | `docs/specs/references.md` | 链接检查脚本 | 链接检查脚本可运行、失效链接被报告 | P2 | 已实现（`docs/specs/references.md` 收录 25 条项目/规范/依赖链接；`scripts/check_links.py` 联网核验 25/25 可访问，`--offline` 或 `STOCKSENATE_SKIP_LINK_CHECK=1` 可跳过；本项目采用 Apache-2.0，第三方归属与许可证声明见 `NOTICE`） |
 
 ## 二十、上线前核验项（v1.2 §20）
 

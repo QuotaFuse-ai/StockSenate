@@ -11,12 +11,13 @@
 
 ---
 
-StockSenate 是 [`simonlin1212/TradingAgents-astock`](https://github.com/simonlin1212/TradingAgents-astock) 的原地重写增强版：
-保留原版全部角色、辩论与决策流程，把数据采集从框架内剥离，交给 `TickHub-CN` / `TickHub-US` / `Newsieve`
-统一提供，自身只负责「多智能体合议 + 回测推演」。
+StockSenate 是自研的 A 股多角色投研合议系统：
+7 位分析师并行产出研报，经多空辩论、研究经理汇总、交易员提案、三档风控审查，由组合经理终审；
+数据采集不在议事层实现，统一交给 `TickHub-CN` / `TickHub-US` / `Newsieve` 提供，
+StockSenate 自身只负责「多智能体合议 + 回测推演」。
 
-- **原版 100% 复现**：7 分析师、多空辩论、研究经理、交易员、三档风险辩论、投资经理终审，节点与输出契约保持不变。
-- **数据层重构**：不再直连东财/巨潮/通达信；`DataAccessLayer` 统一消费 `TickHub-CN`（A 股）、`TickHub-US`（美/港股）、`Newsieve`（资讯），也可离线读取本地 JSON、文本与 SQL。
+- **完整合议链路**：7 分析师 → 多空辩论 → 研究经理 → 交易员 → 三档风险辩论 → 投资经理终审 → 质量门控，节点与输出契约稳定。
+- **数据层独立**：议事层不直连东财/巨潮/通达信；`DataAccessLayer` 统一消费 `TickHub-CN`（A 股）、`TickHub-US`（美/港股）、`Newsieve`（资讯），也可离线读取本地 JSON、文本与 SQL。
 - **生产级增强**：Pydantic 输出强约束、单节点局部重试、辩论收敛、增量分析、安全护栏、HITL 审批、LLM-as-a-Judge、全链路追踪、任务熔断、告警引擎、批量队列、独立 WebUI、MCP Server。
 - **一套环境装全部模型**：MiniMax / DeepSeek / Qwen / GLM / OpenAI / Anthropic / Google / xAI / OpenRouter / Ollama / OpenAI 兼容网关。
 
@@ -26,22 +27,22 @@ StockSenate 是 [`simonlin1212/TradingAgents-astock`](https://github.com/simonli
 
 ---
 
-## 与原版对比
+## 能力一览
 
-| 维度 | 原版 TradingAgents-Astock | StockSenate |
-|------|---------------------------|-------------|
-| 定位 | 多 Agent 投研框架（A 股特化） | 多角色投研合议系统（研究 + 回测推演） |
-| 数据来源 | 框架内置直连 mootdx / 东财 / 腾讯 / 新浪 / 同花顺 | `DataAccessLayer` → `TickHub-CN` / `TickHub-US` / `Newsieve`，可插拔本地 JSON / 文本 / SQL |
-| 数据采集 | 框架自己实现采集、节流、重试 | 交给数据底座，Council 不重复实现采集、缓存、代理池、降级 |
-| 分析师 | 7 个（市场/舆情/新闻/基本面 + 政策/游资/解禁） | 7 个，角色逻辑与提示词保留，输出 Schema 强约束 |
-| 辩论与决策 | 多空辩论 → 研究经理 → 交易员 → 三档风控 → 投决 | 完整保留，新增收敛打分、可配置拓扑、interrupt 人工审批 |
-| 模型配置 | 快/深两档 + `role_llms` 细粒度 | 完全兼容两档与 `role_llms`，角色名保持原版键位 |
-| 断点恢复 | LangGraph checkpoint（SQLite） | 保留，新增 SQLite/Postgres checkpoint 与增量分析 |
-| 报告 | `summary.json` + `complete_report.md` + Markdown/PDF | 保留并扩展，新增结构化版本快照、字段级 Diff、多格式输出 |
-| 决策统计 | `performance`：事后归因 | 保留且定位不变；**回测引擎是新增能力，与 performance 分开验收** |
-| 交互 | CLI + Streamlit | CLI + 独立 WebUI（独立进程/端口/鉴权）+ MCP Server（stdio/http） |
-| 工程化 | 无 CI / 无 lock / 依赖冲突 | GitHub Actions + `uv.lock` + pip-audit + 全提供商同环境 import smoke test |
-| 包名 / 命令 | `tradingagents-astock` / `tradingagents` | `stocksenate` / `ssenate`（旧命令 `tradingagents` 保留为弃用别名） |
+| 维度 | StockSenate |
+|------|-------------|
+| 定位 | 多角色投研合议系统（研究 + 回测推演） |
+| 数据来源 | `DataAccessLayer` → `TickHub-CN` / `TickHub-US` / `Newsieve`，可插拔本地 JSON / 文本 / SQL |
+| 数据采集 | 由数据底座负责；议事层不重复实现采集、缓存、代理池、降级 |
+| 分析师 | 7 个（市场/舆情/新闻/基本面 + 政策/游资/解禁），角色提示词内置，输出 Schema 强约束 |
+| 辩论与决策 | 多空辩论 → 研究经理 → 交易员 → 三档风控 → 投决，含收敛打分、可配置拓扑、interrupt 人工审批 |
+| 模型配置 | 快/深两档 + `role_llms` 细粒度，角色键位稳定 |
+| 断点恢复 | SQLite/Postgres checkpoint 与增量分析 |
+| 报告 | `summary.json` + `complete_report.md` + Markdown/PDF，含结构化版本快照、字段级 Diff、多格式输出 |
+| 决策统计 | `performance` 事后归因保持独立口径；回测引擎是单独能力，两者分开验收 |
+| 交互 | CLI + 独立 WebUI（独立进程/端口/鉴权）+ MCP Server（stdio/http） |
+| 工程化 | GitHub Actions + `uv.lock` + pip-audit + 全提供商同环境 import smoke test |
+| 包名 / 命令 | `stocksenate` / `ssenate`（`tradingagents` 为兼容别名） |
 
 ---
 
@@ -94,9 +95,9 @@ StockSenate 是 [`simonlin1212/TradingAgents-astock`](https://github.com/simonli
 
 ## 角色体系
 
-默认 7 个分析师全部保留原版逻辑，`role_llms` 键位与原版一致：
+默认 7 个分析师全部内置，`role_llms` 键位固定如下：
 
-| 配置键（原版兼容） | 展示名 | 职责 | 阶段 |
+| 配置键 | 展示名 | 职责 | 阶段 |
 |---|---|---|---|
 | `fundamentals`（别名 `basic`） | 基本面分析师 | 财报三表、盈利能力、估值 | analyst |
 | `market`（别名 `technical`） | 技术面分析师 | K 线形态、技术指标、量价 | analyst |
@@ -194,7 +195,7 @@ final_state, decision = graph.propagate(code="600000", date="2024-12-31")
 print(decision["rating"], decision["reason"])
 ```
 
-- `propagate(code, date)` 返回 `(final_state, decision)` 二元组，签名与原版 `TradingAgentsGraph.propagate` 一致。
+- `propagate(code, date)` 返回 `(final_state, decision)` 二元组，签名稳定。
 - `TradingAgentsGraph` 保留为 `SenateGraph` 的别名。
 - `summary.json`、`complete_report.md` 是衍生输出，不替代返回值。
 
@@ -293,11 +294,11 @@ ssenate mcp http --port 8765
 
 | | `ssenate backtest` | `ssenate performance` |
 |---|---|---|
-| 性质 | 策略推演（新增能力） | 决策事后归因（原版能力） |
+| 性质 | 策略推演（独立能力） | 决策事后归因 |
 | 输入 | 已保存决策记录 + 历史行情 | 已落盘决策记录 |
 | 能力 | 滑点、手续费、仓位、重叠窗口、收益曲线、方向准确率、alpha 分组、Buy→Sell alpha 衰减 | 方向正确率、评级分组、评级区分度 |
 | 时点 | `data_as_of` 历史时点推演，防未来函数 | 固定持有期回看 |
-| 验收 | 固定数据集可复现、无未来函数、无样本泄漏 | 统计口径与原版一致 |
+| 验收 | 固定数据集可复现、无未来函数、无样本泄漏 | 统计口径固定、可复核 |
 
 **不要把 performance 当回测，也不要把回测当策略业绩。**
 
@@ -346,6 +347,7 @@ CI 覆盖：`pytest` + `ruff` + `mypy` + `pip-audit` + 全提供商同环境 imp
 
 ## License
 
-Apache License 2.0。本项目基于 `TauricResearch/TradingAgents`（论文
-[TradingAgents: Multi-Agents LLM Financial Trading Framework](https://arxiv.org/abs/2412.20138)）
-与 `simonlin1212/TradingAgents-astock` 的 Apache-2.0 工作，归属声明见 `NOTICE`。
+Apache License 2.0。本项目为独立实现，研究框架的语境与术语受
+[TradingAgents 论文](https://arxiv.org/abs/2412.20138)启发；
+`TradingAgentsGraph` 兼容别名仅为接口便利，不包含第三方项目源码。
+归属与第三方许可证声明见 `NOTICE`。

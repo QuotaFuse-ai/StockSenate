@@ -639,9 +639,7 @@ def config_init(
 @config_app.command("validate")
 def config_validate(
     config: Path = typer.Option(None, "--config", "-c"),
-    strict: bool = typer.Option(
-        False, "--strict", help="把未知配置键视为错误，而不只是告警。"
-    ),
+    strict: bool = typer.Option(False, "--strict", help="把未知配置键视为错误，而不只是告警。"),
     output: str = typer.Option("table", "--output", "-o"),
 ) -> None:
     """校验七个配置文件；失败时定位到文件与键。"""

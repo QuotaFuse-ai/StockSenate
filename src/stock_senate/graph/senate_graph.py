@@ -1,6 +1,6 @@
 """The real multi-role research pipeline.
 
-``SenateGraph.propagate(code, date)`` keeps the upstream contract: it returns
+``SenateGraph.propagate(code, date)`` keeps a stable contract: it returns
 ``(final_state, decision)``. Report files are a derived artifact of the same
 run; nothing in the decision depends on them existing.
 
@@ -101,9 +101,7 @@ class SenateGraph:
         except ValueError as exc:
             # Fail before any provider or model is touched; the generic message
             # keeps a hostile code out of logs and reports.
-            raise ValueError(
-                "analyze 需要合法的 A 股代码（6 位数字，可带 sh/sz/bj 前缀）"
-            ) from exc
+            raise ValueError("analyze 需要合法的 A 股代码（6 位数字，可带 sh/sz/bj 前缀）") from exc
         as_of = date_only(date)
         if len(as_of) != 10 or as_of[4] != "-" or as_of[7] != "-":
             raise ValueError(f"分析日期必须是 YYYY-MM-DD，收到 {date!r}")

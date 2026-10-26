@@ -52,6 +52,20 @@ jobs:
       - run: python -m stock_senate role validate --config config
       - run: pytest
 
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install uv
+      # --frozen refuses to touch uv.lock: a stale lock or a hand-edited
+      # dependency range fails here instead of drifting silently.
+      - run: uv sync --frozen --extra dev
+      - run: uv run --frozen pytest
+
   audit:
     runs-on: ubuntu-latest
     steps:

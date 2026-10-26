@@ -245,7 +245,7 @@ $PY -m pytest -q tests/test_integration_data_layer.py tests/test_e2e_cli.py \
 1. **P0 修复 QUOT-51-09**：compose 健康检查改为 `/healthz`；否则 Docker 部署验收无法通过。
 2. **P0 统一退出码映射**：在 `analyze` / `backtest run` 外层把 `LLMRateLimited→7`、参数解析错误→`2`、`RoleError`/配置错误→`3` 映射为 `typer.Exit`，与 cli-reference §1 对齐。
 3. **P1 修正矩阵与文档**：D-01、D-04、D-05、D-06、D-07、D-11 六处状态/描述需就地更正；D-02、D-03 需二选一——改配置 schema 或改文档，不能长期并存。
-4. **P1 补 WebUI 缺页或缩范围**：辩论过程页是原版核心体验，建议优先；拓扑/配置校验若本期不做，应在 PRD 与矩阵中显式降级并标注里程碑。
+4. **P1 补 WebUI 缺页或缩范围**：辩论过程页是核心体验，建议优先；拓扑/配置校验若本期不做，应在 PRD 与矩阵中显式降级并标注里程碑。
 5. **P1 日志 sink 与审计**：至少落地 `file` sink 与配置变更审计，满足 v1.2 §16.6/§18.3 的「写操作留痕」。
 6. **P2 补 `--config` 一致性**：`backtest run` 增加 `--config`，避免只能依赖环境变量。
 7. **P2 修正 `role show` 别名**：与 `disable/enable` 共用归一化入口。

@@ -134,20 +134,22 @@ def analyse(
         return _error(exc)
 
     files = dict(decision.get("report") or {})
-    return _out({
-        "ok": True,
-        "run_id": decision.get("run_id"),
-        "trace_id": decision.get("trace_id"),
-        "code": decision.get("code"),
-        "date": decision.get("date"),
-        "decision": decision,
-        "report_path": files.get("report"),
-        "report_files": files,
-        "data_envelopes": _envelopes(state),
-        "data": decision.get("data"),
-        "partial": bool(decision.get("partial")),
-        "disclaimer": decision.get("disclaimer") or DISCLAIMER,
-    })
+    return _out(
+        {
+            "ok": True,
+            "run_id": decision.get("run_id"),
+            "trace_id": decision.get("trace_id"),
+            "code": decision.get("code"),
+            "date": decision.get("date"),
+            "decision": decision,
+            "report_path": files.get("report"),
+            "report_files": files,
+            "data_envelopes": _envelopes(state),
+            "data": decision.get("data"),
+            "partial": bool(decision.get("partial")),
+            "disclaimer": decision.get("disclaimer") or DISCLAIMER,
+        }
+    )
 
 
 def backtest(
@@ -184,22 +186,24 @@ def backtest(
         return _error(exc)
 
     artifacts = dict(result.get("artifacts") or {})
-    return _out({
-        "ok": True,
-        "mode": "backtest",
-        "simulation": True,
-        "run_id": result.get("run_key"),
-        "codes": targets,
-        "start": result.get("start"),
-        "end": result.get("end"),
-        "metrics": result.get("metrics"),
-        "per_code": result.get("per_code"),
-        "data": result.get("data"),
-        "partial": bool(result.get("partial")),
-        "equity_curve_ref": artifacts.get("sqlite"),
-        "artifacts": artifacts,
-        "disclaimer": result.get("disclaimer") or DISCLAIMER,
-    })
+    return _out(
+        {
+            "ok": True,
+            "mode": "backtest",
+            "simulation": True,
+            "run_id": result.get("run_key"),
+            "codes": targets,
+            "start": result.get("start"),
+            "end": result.get("end"),
+            "metrics": result.get("metrics"),
+            "per_code": result.get("per_code"),
+            "data": result.get("data"),
+            "partial": bool(result.get("partial")),
+            "equity_curve_ref": artifacts.get("sqlite"),
+            "artifacts": artifacts,
+            "disclaimer": result.get("disclaimer") or DISCLAIMER,
+        }
+    )
 
 
 def alert_query(
@@ -233,13 +237,15 @@ def alert_query(
             continue
         matched.append(row)
 
-    return _out({
-        "ok": True,
-        "alerts": matched,
-        "count": len(matched),
-        "log": str(webui_channel.alerts_log(root)),
-        "disclaimer": DISCLAIMER,
-    })
+    return _out(
+        {
+            "ok": True,
+            "alerts": matched,
+            "count": len(matched),
+            "log": str(webui_channel.alerts_log(root)),
+            "disclaimer": DISCLAIMER,
+        }
+    )
 
 
 def report_query(
@@ -274,23 +280,25 @@ def report_query(
         return _error(exc)
 
     files = dict(state.get("report") or {})
-    return _out({
-        "ok": True,
-        "run_id": state.get("run_id"),
-        "summary": render_summary(state),
-        "sections": {
-            "analysts": list(state.get("analysts") or []),
-            "debate": dict(state.get("debate") or {}),
-            "research": dict(state.get("research") or {}),
-            "trade": dict(state.get("trade") or {}),
-            "risk": dict(state.get("risk") or {}),
-            "decision": dict(state.get("decision") or {}),
-            "quality": dict(state.get("quality") or {}),
-            "hitl": dict(state.get("hitl") or {}),
-        },
-        "report_path": files.get("report"),
-        "disclaimer": DISCLAIMER,
-    })
+    return _out(
+        {
+            "ok": True,
+            "run_id": state.get("run_id"),
+            "summary": render_summary(state),
+            "sections": {
+                "analysts": list(state.get("analysts") or []),
+                "debate": dict(state.get("debate") or {}),
+                "research": dict(state.get("research") or {}),
+                "trade": dict(state.get("trade") or {}),
+                "risk": dict(state.get("risk") or {}),
+                "decision": dict(state.get("decision") or {}),
+                "quality": dict(state.get("quality") or {}),
+                "hitl": dict(state.get("hitl") or {}),
+            },
+            "report_path": files.get("report"),
+            "disclaimer": DISCLAIMER,
+        }
+    )
 
 
 def config_query(

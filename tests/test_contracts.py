@@ -1,6 +1,6 @@
 """Public Python API contract.
 
-``propagate`` must keep the upstream ``(final_state, decision)`` shape and the
+``propagate`` must keep the ``(final_state, decision)`` shape and the
 keyword-only switches the CLI relies on, and it must actually run: the M0
 engine is implemented, so the alias and signature are pinned against a real
 offline run rather than a placeholder body.

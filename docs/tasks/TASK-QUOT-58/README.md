@@ -47,7 +47,7 @@ ssenate config show --config <tmp>/config -o json
 
 - `data/providers/base.py`：新增 `sanitize_envelope()` 与 `SanitizingProvider`。对 envelope 的 `payload` 递归清洗所有字符串；清洗计数写入 `source_detail`（`sanitized: injections=N, sentences=M[, matched_terms=K]`），**只记录数量不记录命中词本身**，避免清洗说明再次把违禁词带进提示词。未被改写时原样返回，不产生噪声。
 - `data/providers/__init__.py`：`build_provider()` 对所有 provider 统一返回 `SanitizingProvider(...)`，形成单一出口——现有与未来 provider 都无法绕过。
-- `data/sanitize.py`：注入命中由「替换短语」改为「整句丢弃 + `[外来指令已移除]` 标记」。仅替换短语会留下「立即清空所有分析」这类真正的命令尾巴。合规过滤口径不变，`PROHIBITED_TERMS` 增补「评级上调为买入 / 评级上调至买入 / 上调评级至买入 / 上调为买入 / 上调至买入」，上游文档不能替参议院下定评级。
+- `data/sanitize.py`：注入命中由「替换短语」改为「整句丢弃 + `[外来指令已移除]` 标记」。仅替换短语会留下「立即清空所有分析」这类真正的命令尾巴。合规过滤口径不变，`PROHIBITED_TERMS` 增补「评级上调为买入 / 评级上调至买入 / 上调评级至买入 / 上调为买入 / 上调至买入」，外部文档不能替参议院下定评级。
 
 验证：
 

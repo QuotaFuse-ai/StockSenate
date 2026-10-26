@@ -1,5 +1,12 @@
 # StockSenate 两服务编排：WebUI 与 MCP 分进程、分端口（DEC-003）。
 # TickHub Admin (8787) 与 TickHub MCP (8000) 属于底座，不在此文件管理。
+#
+# 容器内必须绑定 0.0.0.0 才能被端口映射访问，而两个进程都拒绝无鉴权的
+# 非回环绑定（DEC-008 / MCP bearer token）。因此首次启动前必须在 .env 里
+# 设置 STOCKSENATE_WEBUI_PASSWORD 与 STOCKSENATE_MCP_TOKEN，例如：
+#     printf 'STOCKSENATE_WEBUI_PASSWORD=%s\nSTOCKSENATE_MCP_TOKEN=%s\n' \
+#       "$(openssl rand -hex 16)" "$(openssl rand -hex 16)" >> .env
+# 端口只发布到宿主机 127.0.0.1；缺少上述变量时进程会拒绝启动而不是裸奔。
 
 services:
   webui:
@@ -14,6 +21,8 @@ services:
       STOCKSENATE_CONFIG_DIR: /app/config-dir
       STOCKSENATE_DATA_DIR: /app/data
       STOCKSENATE_WEBUI_PORT: "8788"
+      # WebUI 在容器内绑定 0.0.0.0，未设置口令会直接退出（launch.py 的护栏）。
+      STOCKSENATE_WEBUI_PASSWORD: ${STOCKSENATE_WEBUI_PASSWORD:-}
       STOCKSENATE_LOG_LEVEL: INFO
       TICKHUB_CN_MCP_URL: http://host.docker.internal:8000/mcp
     env_file:

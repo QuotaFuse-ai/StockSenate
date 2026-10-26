@@ -9,13 +9,13 @@ CLI 长别名：quota-fuse-council
 数据底座：QuotaFuse StockData
 定位：只做投研分析 + 回测推演，不做实盘交易下单，不输出自动交易指令。
 文档依据：原 TradingAgents‑astock 仓库代码与 README、QuotaFuse StockData 开发文档、MCP 规范及相关官方文档 [R1][R2][R3][R4][R5]。
-说明：文中 [R1] 等编号对应第十九章“参考链接汇总”。发布前需逐项核验链接、许可证、PyPI 名称和命令占用情况；这些属于上线核验项，不是架构设计疑问。
+说明：文中 [R1] 等编号对应第十九章“外部链接汇总”。发布前需逐项核验链接、许可证、PyPI 名称和命令占用情况；这些属于上线核验项，不是架构设计疑问。
 一、项目基础信息
 1.1 项目定位
 QuotaFuse Council 是 simonlin1212/TradingAgents-astock 的原地重写增强版 [R1]：
-原版 7 角色、多空辩论、研究经理、交易员、三档风险辩论、投资经理终审完整保留；
-原版 CLI、Streamlit WebUI、Python API、报告输出、LangGraph checkpoint 完整保留；
-原版全部 Issue 逐项解决；
+内置 7 角色、多空辩论、研究经理、交易员、三档风险辩论、投资经理终审完整保留；
+内置 CLI、Streamlit WebUI、Python API、报告输出、LangGraph checkpoint 完整保留；
+全部 Issue 逐项闭环；
 新增 17 项企业级能力；
 数据采集统一交给 QuotaFuse StockData，不在本组件重复实现采集、缓存、代理池、降级 [R2]；
 支持 StockData 与本地 JSON/文档/TXT/数据库可插拔、可混合、可实时采集；
@@ -58,15 +58,15 @@ Claude Agent SDK 订阅模式存在；
 httpx 依赖冲突在历史记录中出现，需彻底解决。
 2.2 必须修正的细节
 propagate 返回结构
-原版 propagate 返回 (final_state, decision) 元组。改造后必须保持该返回值签名不变；summary.json、complete_report.md 是衍生输出，不是替代返回值。验收时需做返回值契约测试。
+既有 propagate 返回 (final_state, decision) 元组。改造后必须保持该返回值签名不变；summary.json、complete_report.md 是衍生输出，不是替代返回值。验收时需做返回值契约测试。
 角色模型配置粒度
-原版已支持 role_llms 细粒度配置，可为单个角色指定不同供应商模型。Council 必须继承并兼容该能力，不能只保留“快思考/深思考”两级。
+既有实现已支持 role_llms 细粒度配置，可为单个角色指定不同供应商模型。Council 必须继承并兼容该能力，不能只保留“快思考/深思考”两级。
 performance 不是回测
-原版 README 明确说明该功能是决策事后归因统计，不是回测、不是策略业绩。Council 文档中“完整回测引擎”是新增能力，必须与 performance 分开描述、分开验收。
+现有 README 明确说明该功能是决策事后归因统计，不是回测、不是策略业绩。Council 文档中“完整回测引擎”是新增能力，必须与 performance 分开描述、分开验收。
 数据获取是内建模式，迁移是架构重构
-原版自带 A 股数据供应商并直连免费源。Council 将其迁移到 StockData 底座属于架构重构，不是简单新增功能；需评估对原数据质量测试的影响，并保留迁移期兼容开关。
+既有实现自带 A 股数据供应商并直连免费源。Council 将其迁移到 StockData 底座属于架构重构，不是简单新增功能；需评估对原数据质量测试的影响，并保留迁移期兼容开关。
 项目定位是研究框架，不是产品
-原版强调面向研究与教学、不构成投资建议、不产出可执行价位。Council 对外表述必须延续该边界，避免用户产生“荐股”预期。
+既有实现强调面向研究与教学、不构成投资建议、不产出可执行价位。Council 对外表述必须延续该边界，避免用户产生“荐股”预期。
 三、总体架构
 text
 ┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
@@ -86,10 +86,10 @@ Council 核心服务：多角色分析、辩论、终审、回测、告警、报
 Council MCP Server：stdio/http 双传输，stdout 只输出 MCP 协议报文，日志走 stderr。
 Council WebUI：独立进程、独立端口、独立鉴权，只做 Council 业务界面；运维监控只读展示并跳转 StockData Admin Console。
 StockData 核心 + Admin Console：负责采集、缓存、代理池、字段映射、风险事件、数据源健康与降级 [R2]。
-四、原版能力 100% 复现清单
-原版能力</w:r><w:r><w:t>复现要求</w:r><w:r><w:t>验收方式
+四、基础能力清单
+基础能力</w:r><w:r><w:t>实现要求</w:r><w:r><w:t>验收方式
 7 角色分析师：基本面/技术面/情绪/新闻/政策/游资龙虎榜/解禁监控</w:r><w:r><w:t>角色逻辑不改</w:r><w:r><w:t>角色输出 schema 回归
-多空辩论 + 研究经理综合 + 交易员规划 + 三档风险辩论 + 投资经理终审</w:r><w:r><w:t>完整复现</w:r><w:r><w:t>工作流节点快照对比
+多空辩论 + 研究经理综合 + 交易员规划 + 三档风险辩论 + 投资经理终审</w:r><w:r><w:t>完整覆盖</w:r><w:r><w:t>工作流节点快照对比
 快思考/深思考双模型分层 + role_llms 细粒度配置</w:r><w:r><w:t>保留并兼容</w:r><w:r><w:t>配置迁移与切换测试
 全部 LLM 提供商：MiniMax、DeepSeek、Qwen、GLM、OpenAI、Anthropic、Google、xAI、OpenRouter、Ollama、OpenAI 兼容网关</w:r><w:r><w:t>全部保留</w:r><w:r><w:t>同一环境 import smoke test [R19]
 LangGraph checkpoint 断点持久</w:r><w:r><w:t>保留</w:r><w:r><w:t>中断恢复测试 [R5]
@@ -104,7 +104,7 @@ A 股规则：T+1、涨跌停、最小手数、交易时段、ST、CSI300 基准
 v0.5.2 performance summary</w:r><w:r><w:t>完整保留，定位为事后归因，不混同回测</w:r><w:r><w:t>统计口径测试
 Claude Agent SDK 订阅模式</w:r><w:r><w:t>保留</w:r><w:r><w:t>订阅模式联调 [R20]
 ~/.tradingagents/llm_config.json</w:r><w:r><w:t>保留，与 toml 合并，自动迁移</w:r><w:r><w:t>配置迁移测试
-五、原版 Issue 100% 解决方案
+五、Issue 闭环清单
 5.1 Issue 102：多数据源同时失败
 DataAccessLayer 统一读取 StockData 的 data_source_status、source、freshness [R2]；
 单源失败不影响其他角色；缺失数据标记 missing/degraded；
@@ -273,7 +273,7 @@ mode=hybrid 本地历史 + StockData 实时增量可混合；
 回测使用本地归档时结果可复现。
 八、角色体系：默认 7 角色 + 自定义角色
 8.1 默认角色
-基本面、技术面、情绪、新闻、政策、游资龙虎榜、解禁监控，全部保留原版逻辑。
+基本面、技术面、情绪、新闻、政策、游资龙虎榜、解禁监控，全部保留内置逻辑。
 8.2 角色定义 agent_roles.toml
 toml
 [roles.basic]
@@ -506,10 +506,10 @@ CI：pytest + pip-audit + lint + 全依赖 import smoke test [R13][R11][R12][R22
 验收：干净环境 pip install quota-fuse-council 后 CLI、Python API、WebUI 可用。
 十八、测试、部署、边界与里程碑
 18.1 测试类型
-原版回归、StockData 联调、数据源可插拔、弱模型降级、增量分析、回测正确性、告警、依赖兼容、CI/lock、MCP、安全、自定义角色回归、旧命令兼容、配置迁移、Council WebUI 回归与审计、MCP stdout 纯净性回归。
+基础能力回归、StockData 联调、数据源可插拔、弱模型降级、增量分析、回测正确性、告警、依赖兼容、CI/lock、MCP、安全、自定义角色回归、旧命令兼容、配置迁移、Council WebUI 回归与审计、MCP stdout 纯净性回归。
 18.2 关键验收项
-原版用户升级零改动；
-原版 100% 能力回归通过；
+既有用户升级零改动；
+基础能力回归全部通过；
 Issue 102/105 全场景通过；
 18 项新增逐项验收；
 实时 StockData 采集可超时降级；
@@ -533,7 +533,7 @@ Docker Compose 启动 qf-council、qf-council-webui、webui、redis，可选 sto
 实时采集默认关闭，开启后必须有超时、降级、防重复锁；
 所有数据带溯源元信息；
 MCP stdio stdout 只输出协议报文；
-“100% 复现/解决”以接口契约和回归测试验收；
+“能力完整/Issue 闭环”以接口契约和回归测试验收；
 原仓库许可证与兼容实现边界需确认；
 不重复实现 StockData 的采集、缓存、代理池、降级能力；
 Council WebUI 独立进程、独立端口、独立鉴权，默认本机监听，对外开放必须鉴权；
@@ -541,15 +541,15 @@ Council WebUI 独立进程、独立端口、独立鉴权，默认本机监听，
 Council WebUI 不得污染 MCP stdio 的 stdout，不与 MCP Server 混进程。
 18.5 里程碑
 里程碑</w:r><w:r><w:t>内容</w:r><w:r><w:t>验收
-M0 兼容基线</w:r><w:r><w:t>原版 100% 复现；StockData 三模式；DataProvider 可插拔；依赖冲突根治；CI/lock；英文文档修复；Council WebUI Streamlit 独立起步</w:r><w:r><w:t>原版回归；stockdata/local/hybrid 可用；qfc webui 可启动
+M0 兼容基线</w:r><w:r><w:t>基础能力完整；StockData 三模式；DataProvider 可插拔；依赖冲突根治；CI/lock；英文文档修复；Council WebUI Streamlit 独立起步</w:r><w:r><w:t>基础能力回归；stockdata/local/hybrid 可用；qfc webui 可启动
 M1 质量稳定</w:r><w:r><w:t>Pydantic Schema + 局部重试；配置统一；结构化日志；增量分析；角色配置化 + 自定义角色；辩论收敛；工具权限隔离；任务熔断</w:r><w:r><w:t>弱模型跑通；增量 token 下降；角色扩展可用
 M2 回测告警</w:r><w:r><w:t>回测引擎 + WebUI 页面；告警引擎 + WebUI 面板；报告快照 + Diff；多格式输出；风险信号</w:r><w:r><w:t>回测可复现；告警去重；Diff 可读
 M3 平台化</w:r><w:r><w:t>MCP Server；批量队列；拓扑可配置；人工工单；PyPI 发布；旧包兼容迁移；WebUI 可升级 FastAPI + 前端</w:r><w:r><w:t>MCP 联调；批量可控；pip 安装可用；WebUI 鉴权审计
 M4 增强</w:r><w:r><w:t>事实交叉核验；体验优化；文档固化</w:r><w:r><w:t>冲突可标记；文档完整
-十九、参考链接汇总
+十九、外部链接汇总
 编号</w:r><w:r><w:t>名称</w:r><w:r><w:t>链接</w:r><w:r><w:t>用途
-R1</w:r><w:r><w:t>原 TradingAgents-astock 仓库</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://github.com/simonlin1212/TradingAgents-astock" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://github.com/simonlin1212/TradingAgents-astock</w:r><w:r><w:t>原版能力与 Issue 对齐
-R2</w:r><w:r><w:t>QuotaFuse StockData 参考仓库</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://github.com/simonlin1212/a-stock-data" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://github.com/simonlin1212/a-stock-data</w:r><w:r><w:t>StockData 兼容参考
+R1</w:r><w:r><w:t>TradingAgents-astock 公开仓库</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://github.com/simonlin1212/TradingAgents-astock" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://github.com/simonlin1212/TradingAgents-astock</w:r><w:r><w:t>基础能力与 Issue 对齐
+R2</w:r><w:r><w:t>QuotaFuse StockData 公开仓库</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://github.com/simonlin1212/a-stock-data" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://github.com/simonlin1212/a-stock-data</w:r><w:r><w:t>StockData 兼容性对照
 R3</w:r><w:r><w:t>Model Context Protocol 规范</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://modelcontextprotocol.io/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://modelcontextprotocol.io/</w:r><w:r><w:t>MCP 协议
 R4</w:r><w:r><w:t>MCP Python SDK</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://github.com/modelcontextprotocol/python-sdk" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://github.com/modelcontextprotocol/python-sdk</w:r><w:r><w:t>MCP Python 实现
 R5</w:r><w:r><w:t>LangGraph</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://langchain-ai.github.io/langgraph/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://langchain-ai.github.io/langgraph/</w:r><w:r><w:t>工作流、checkpoint、interrupt
@@ -561,22 +561,22 @@ R10</w:r><w:r><w:t>Python Packaging</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fl
 R11</w:r><w:r><w:t>pip-audit</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://pypi.org/project/pip-audit/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://pypi.org/project/pip-audit/</w:r><w:r><w:t>依赖安全审计
 R12</w:r><w:r><w:t>Ruff</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://docs.astral.sh/ruff/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://docs.astral.sh/ruff/</w:r><w:r><w:t>lint
 R13</w:r><w:r><w:t>pytest</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://docs.pytest.org/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://docs.pytest.org/</w:r><w:r><w:t>测试
-R14</w:r><w:r><w:t>akShare</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://akshare.akfamily.xyz/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://akshare.akfamily.xyz/</w:r><w:r><w:t>数据源参考
+R14</w:r><w:r><w:t>akShare</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://akshare.akfamily.xyz/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://akshare.akfamily.xyz/</w:r><w:r><w:t>数据源说明
 R15</w:r><w:r><w:t>mootdx</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://github.com/betterquant2/mootdx" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://github.com/betterquant2/mootdx</w:r><w:r><w:t>通达信数据源，发布前核验
 R16</w:r><w:r><w:t>Redis</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://redis.io/docs/latest/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://redis.io/docs/latest/</w:r><w:r><w:t>缓存
 R17</w:r><w:r><w:t>APScheduler</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://apscheduler.readthedocs.io/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://apscheduler.readthedocs.io/</w:r><w:r><w:t>定时任务
 R18</w:r><w:r><w:t>Crawl4AI</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://github.com/unclecode/crawl4ai" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://github.com/unclecode/crawl4ai</w:r><w:r><w:t>可选文本清洗
-R19</w:r><w:r><w:t>LiteLLM</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://docs.litellm.ai/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://docs.litellm.ai/</w:r><w:r><w:t>多模型网关参考
+R19</w:r><w:r><w:t>LiteLLM</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://docs.litellm.ai/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://docs.litellm.ai/</w:r><w:r><w:t>多模型网关文档
 R20</w:r><w:r><w:t>Claude Agent SDK</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://docs.anthropic.com/en/api/agent-sdk/overview" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://docs.anthropic.com/en/api/agent-sdk/overview</w:r><w:r><w:t>订阅模式，发布前核验
 R21</w:r><w:r><w:t>PyPI</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://pypi.org/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://pypi.org/</w:r><w:r><w:t>包发布
 R22</w:r><w:r><w:t>GitHub Actions</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://docs.github.com/en/actions" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://docs.github.com/en/actions</w:r><w:r><w:t>CI
-R23</w:r><w:r><w:t>SQLAlchemy</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://docs.sqlalchemy.org/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://docs.sqlalchemy.org/</w:r><w:r><w:t>多数据库落库参考
+R23</w:r><w:r><w:t>SQLAlchemy</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://docs.sqlalchemy.org/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://docs.sqlalchemy.org/</w:r><w:r><w:t>多数据库落库文档
 R24</w:r><w:r><w:t>OpenTelemetry</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://opentelemetry.io/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://opentelemetry.io/</w:r><w:r><w:t>可观测性可选
 R25</w:r><w:r><w:t>Docker Compose</w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://docs.docker.com/compose/" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr><w:t>https://docs.docker.com/compose/</w:r><w:r><w:t>部署
 二十、上线前核验项（非设计疑问）
 核验 quota-fuse-council、qf-council、qfc 在 PyPI 和系统命令中是否可用；
 核验原仓库许可证与兼容实现边界，避免直接复制受限代码和文档；
-核验 R15、R20 等参考链接发布时是否仍有效；
+核验 R15、R20 等外部链接发布时是否仍有效；
 确认旧包名 quota-fuse-trading-agent 过渡期保留时长；
 确认自定义角色默认上限 12 是否适合目标用户；
 在真实 MCP 客户端中完成 stdio/http 联调；

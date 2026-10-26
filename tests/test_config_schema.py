@@ -205,7 +205,7 @@ def test_name_keyed_tables_accept_new_names(tmp_path: Path) -> None:
     directory = copy_config(tmp_path)
     append_to(
         directory / "agent_roles.toml",
-        '\n[roles.custom_sector]\n'
+        "\n[roles.custom_sector]\n"
         'display_name = "行业分析师"\n'
         'kind = "analyst"\n'
         'tools = ["news_search"]\n'

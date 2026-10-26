@@ -18,9 +18,9 @@
 
 ## 1. 背景与问题
 
-TradingAgents-astock 已经验证了「多角色辩论 + LangGraph」在 A 股文本上的可行性，但它是一个研究演示：数据直连免费源、没有回测、没有告警、没有队列、没有质量闸门，工程化能力几乎为零。直接在其上做产品化会遇到六个结构性问题：
+「多角色辩论 + LangGraph」在 A 股文本上的可行性已有公开实践验证，但大多数实现停留在研究演示：数据直连免费源、没有回测、没有告警、没有队列、没有质量闸门，工程化能力几乎为零。StockSenate 立项要正面解决六个结构性问题：
 
-1. **数据层与业务层耦合**：采集、限流、降级写在图节点里，任何数据源抖动都会让整次分析失败（上游 Issue 102）。
+1. **数据层与业务层耦合**：采集、限流、降级写在图节点里，任何数据源抖动都会让整次分析失败（Issue 102）。
 2. **回测名不副实**：只有事后归因（`performance`），没有滑点、手续费、持仓、重叠窗口，不能回答「这套判断在过去赚不赚钱」（Issue 105①）。
 3. **告警能力缺失**：只有静态规则描述，没有去重、升级、通道重试与签名（Issue 105②）。
 4. **成本不可控**：一次分析 30~50 次 LLM 调用，没有预算上限、没有熔断、没有批量队列。
@@ -95,13 +95,13 @@ StockSenate 的目标不是「再加几个 Agent」，而是把上述六项变�
 
 | ID | 功能 | 验收要点 |
 |---|---|---|
-| F-01 | 七分析师 + 多空辩论 + 研究经理 + 交易员 + 三档风险辩论 + 投资经理终审 | 拓扑与上游一致；每节点输出符合 Pydantic Schema |
-| F-02 | `SenateGraph.propagate(code, date)` 保持 `(final_state, decision)` 返回 | 与上游签名一致；`TradingAgentsGraph` 别名可用 |
+| F-01 | 七分析师 + 多空辩论 + 研究经理 + 交易员 + 三档风险辩论 + 投资经理终审 | 拓扑固定且可审计；每节点输出符合 Pydantic Schema |
+| F-02 | `SenateGraph.propagate(code, date)` 保持 `(final_state, decision)` 返回 | 签名稳定；`TradingAgentsGraph` 别名可用 |
 | F-03 | DataAccessLayer + `DataEnvelope` 统一契约 | 六字段齐全；`freshness`/`confidence`/`data_source_status` 枚举受限 |
 | F-04 | 四种数据模式 `stockdata / local / hybrid / priority` | 按域优先级路由；回退留痕；全源失败返回 `missing` 而非抛栈 |
 | F-05 | TickHub-CN / TickHub-US 接入（MCP stdio 或本地 import），资讯三域由 TickHub-CN 承担 | 断网时可切本地；stdio 模式 stdout 纯净 |
 | F-06 | 角色配置 `agent_roles.toml`，内置 7 + 自定义 5，上限 12 | 超限报错；工具权限按角色隔离 |
-| F-07 | 细粒度 `role_llms` | 上游 16 个合法键全支持；错键报错；同 provider+model 复用客户端 |
+| F-07 | 细粒度 `role_llms` | 16 个合法键全支持；错键报错；同 provider+model 复用客户端 |
 | F-08 | 工作流可配 `workflow.toml` | 分析师可增删；轮数可调；不可跳过终审 |
 | F-09 | CLI `ssenate` 全命令 + 稳定退出码 | `--help` 可读；json/table/csv 走 stdout，日志走 stderr |
 | F-10 | 报告输出：五个分区 + `summary.json` + 数据附录 | 与 CLI/WebUI/MCP 三处一致 |
@@ -180,8 +180,8 @@ ssenate analyze 600519 --date 2026-10-24
 | 可用性 | 单数据源失败不导致整次分析失败；全源失败给出可读原因 |
 | 可观测 | 每个节点有结构化日志与 span；日志默认脱敏 API key |
 | 安全 | Webhook 签名 + 幂等键；MCP http 默认仅本机 + token；配置不落明文密钥（走环境变量） |
-| 兼容 | Python ≥ 3.11；上游 Python API、CLI、配置目录、环境变量均有过渡方案 |
-| 许可 | Apache-2.0，保留上游 NOTICE |
+| 兼容 | Python ≥ 3.11；既有 Python API、CLI、配置目录、环境变量均有迁移方案 |
+| 许可 | Apache-2.0，保留第三方归属 `NOTICE` |
 | 可测试 | 无 LLM 也能跑通 CLI/配置/数据契约的单测；回测有固定快照 |
 
 ---
@@ -216,7 +216,7 @@ ssenate analyze 600519 --date 2026-10-24
 1. 文档 v1.1 §1–§19 与 v1.2 全部章节，逐条在 `requirements-traceability.md` 有对应模块与验收方式，无空项。
 2. 功能验收以「可重复运行的命令 + 可断言的输出」为准，不以截图或口头说明为准。
 3. 安全边界（不实盘、不产出价位、不泄露密钥、Webhook 验签、MCP 鉴权）由安全工程师独立复核。
-4. 与上游的兼容项（API 签名、CLI 旧命令、配置目录迁移、环境变量前缀）必须有自动化测试。
+4. 兼容项（Python API 签名、CLI 旧命令、配置目录迁移、环境变量前缀）必须有自动化测试。
 5. 任一 P0 项缺失即不进入验收。
 
 ---

@@ -6,7 +6,7 @@
 
 ## 背景
 
-参考仓库 TradingAgents-astock 在各 analyst 节点内直接调用数据接口，采集、缓存、重试、降级散落在工作流里，导致：换数据源要改节点；离线复现困难；数据缺失时模型会用「常识」补数值。StockSenate 的数据采集统一交给 TickHub-CN / TickHub-US / Newsieve，本仓库不重复实现采集、缓存、代理池与降级。
+常见做法是在各 analyst 节点内直接调用数据接口，采集、缓存、重试、降级散落在工作流里，导致：换数据源要改节点；离线复现困难；数据缺失时模型会用「常识」补数值。StockSenate 的数据采集统一交给 TickHub-CN / TickHub-US / Newsieve，本仓库不重复实现采集、缓存、代理池与降级。
 
 ## 决策
 
