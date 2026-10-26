@@ -78,8 +78,8 @@
 | 5.7 | 30~50 次调用 → 增量分析 | `workflow/incremental.py` | 配置 / analyze | 二次分析 token 显著下降 | P1 | 待实现（无增量分析模块） |
 | 5.8 | 配置分散 → 统一 toml + Schema 校验 | `config/*.toml`、`config/schema.py` | `ssenate config validate` | 错误定位到文件与键 | P0 | 已实现 |
 | 5.9 | 日志弱 → 结构化日志（stdout/stderr 分离、脱敏、多 sink） | `observability/logging.py` | 全部入口 | stdout 无日志；API key 被脱敏 | P0 | 部分实现（`observability/logging.py`：stdout 纯净、字段脱敏、stderr 结构化；多 sink 仅 stderr，file/sqlite/mysql/postgres 未实现——file 已排期 QUOT-60，其余保留待实现） |
-| 5.10 | 无 CI → 补全 CI | `.github/workflows/ci.yml` | CI | lint + type + test + audit 全绿 | P0 | 已实现（根因：GitHub Actions 下 Typer 强制 Rich 终端渲染，`OptionHighlighter` 把 `--start` 拆成 `-` + `-start` 两段 ANSI，断言看不到连续原文；测试子进程加 `_TYPER_FORCE_DISABLE_TERMINAL=1` 后 Linux/Windows 各 192 通过，未用 skipif、未改断言；PR CI 复核） |
-| 5.11 | 无 lock file → 依赖锁定 | `uv.lock` | 安装 | CI 用 `uv sync --frozen` | P1 | 已实现（uv 0.13.5 解析 107 包；CI 新增 lockfile job：`uv sync --frozen --extra dev` + `uv run --frozen pytest`；干净 venv 从 lock 安装后 192 通过） |
+| 5.10 | 无 CI → 补全 CI | `.github/workflows/ci.yml` | CI | lint + type + test + audit 全绿 | P0 | 已实现（根因：GitHub Actions 下 Typer 强制 Rich 终端渲染，`OptionHighlighter` 把 `--start` 拆成 `-` + `-start` 两段 ANSI，断言看不到连续原文；测试子进程加 `_TYPER_FORCE_DISABLE_TERMINAL=1`，未用 skipif、未改断言。合并 main 后另修两处基线问题：`from tests.cli_support` 在裸 `pytest` 下不可导入（`pyproject.toml` 声明 `pythonpath=["."]`）、MCP stdio 用例 EOF 竞态（先读两条响应再关 stdin）；本地 225 passed 连跑 5 次，PR CI run `40291436449` 十个 job 全绿） |
+| 5.11 | 无 lock file → 依赖锁定 | `uv.lock` | 安装 | CI 用 `uv sync --frozen` | P1 | 已实现（uv 0.13.5 解析 107 包；CI 新增 lockfile job：`uv sync --frozen --extra dev` + `uv run --frozen pytest`；合并 main 后干净 venv 从 lock 安装 225 通过，lockfile job 在 run `40291436449` 为 success） |
 | 5.12 | 英文文档不一致 → 修复 | `README.md`、`docs/` | 文档 | 中英文命令与配置键一致 | P2 | 已实现 |
 
 ## 六、新增功能与里程碑映射（§6）

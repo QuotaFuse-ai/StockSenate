@@ -21,15 +21,23 @@ env["_TYPER_FORCE_DISABLE_TERMINAL"] = "1"
 
 这是 Typer 自带的关闭开关，断言与被测用例一行未改，也没有新增 `skipif`：
 
-- 用例数保持 192，未下降；
-- 在 `GITHUB_ACTIONS=true CI=true` 下 Linux 与 Windows 均 192 passed；
-- `ruff check` / `ruff format --check` 仍干净（102 files）。
+- 未用 skipif、未改任何断言；合并 main 后本地 `GITHUB_ACTIONS=true CI=true` 下 225 passed（连跑 5 次）；
+- `ruff check` / `ruff format --check` 干净（105 files）；
+- PR 最终 CI：run `40291436449`，lint / typecheck / 四个 test 矩阵 / lockfile / audit / package / dependency-isolation 共 10 个 job 全部 success。
+
+## CI 复核：合并 main 后暴露的基线问题
+
+PR #1 合入 `79768c9` 后，CI 又暴露两处与该提交相关的问题（不是 5.10 改动引入）：
+
+1. 收集阶段 `ModuleNotFoundError: No module named 'tests'`：`tests/test_code_traversal.py` 与 `tests/test_dotenv.py` 以 `from tests.cli_support import ...` 引辅助模块，而仓库没有 `tests/__init__.py`；CI 跑的是裸 `pytest` 控制台脚本，不会把仓库根加入 `sys.path`（`python -m pytest` 会，所以本地容易漏掉）。已在 `pyproject.toml` 声明 `pythonpath = ["."]`，用例与断言零改动。
+2. `test_mcp_stdio_stdout_is_still_only_jsonrpc_with_a_dotenv` 竞态：`subprocess.run(input=...)` 立即关闭 stdin，stdio server 可能在 `tools/list` 仍在派发时因 EOF 退出，全套跑约 3 次红 1 次。改为先读到两条 JSON-RPC 响应再关闭 stdin；断言（恰好 2 条、均为 `jsonrpc: 2.0`、stdout/stderr 不含 sentinel）完全保留。
+3. `ruff format --check src tests` 对该提交新增/修改的 5 个文件报格式差异（CI 与本地同为 ruff 0.17.2），已按 `ruff format` 修正，仅格式变化。
 
 ## 5.11 uv.lock
 
 - 用 uv 0.13.5 生成 `uv.lock`（解析 107 个包）并提交。
-- 干净虚拟环境执行 `uv sync --frozen --extra dev` 安装后，导入 typer / rich / starlette / mcp 正常，pytest 192 passed。
-- CI 新增 `lockfile` job：`uv sync --frozen --extra dev` + `uv run --frozen pytest`。`--frozen` 保证手改依赖范围或锁文件过期时直接失败，而不是静默漂移。
+- 干净虚拟环境执行 `uv sync --frozen --extra dev` 安装后，导入 typer / rich / starlette / mcp 正常，pytest 225 passed。
+- CI 新增 `lockfile` job：`uv sync --frozen --extra dev` + `uv run --frozen pytest`。`--frozen` 保证手改依赖范围或锁文件过期时直接失败，而不是静默漂移；该 job 在 run `40291436449` 为 success。
 
 ## 17 release workflow
 
@@ -89,6 +97,8 @@ POST http://127.0.0.1:8765/mcp（无 token）-> 401
 - `Dockerfile`、`docker-compose.yml`、`.env.example`（18.3）
 - `docs/specs/references.md`、`scripts/check_links.py`（19）
 - `docs/specs/requirements-traceability.md`（5.10 / 5.11 / 17 / 18.3 / 19 五行状态）
+- `pyproject.toml`（pytest `pythonpath`）、`tests/test_dotenv.py`（stdio 竞态）
+- ruff 格式化的 5 个基线文件：`src/stock_senate/cli.py`、`src/stock_senate/graph/senate_graph.py`、`src/stock_senate/mcp_server/tools.py`、`tests/test_cli.py`、`tests/test_config_schema.py`
 
 ## 遗留事项
 
