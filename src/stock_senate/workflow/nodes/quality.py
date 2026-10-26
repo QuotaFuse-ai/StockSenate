@@ -86,17 +86,21 @@ def run_quality_gate(
     model = run_role(ctx, "quality_gate", context)
     if not isinstance(model, QualityVerdict):
         ctx.skipped.append({"role": "quality_gate", "reason": "Schema 不是 QualityVerdict"})
-        return _with_note(_fallback("质量闸门输出 Schema 校验失败", threshold), "已回退规则评分。")
+        return _with_note(
+            _fallback("质量闸门输出 Schema 校验失败", threshold),
+            "评审输出不可用，已按最低分阻断。",
+        )
     if not judge_module.judge_usable(model):
         return _with_note(rules, "评审模型未给出可用评分，已回退规则评分。")
 
     if mode == "judge":
-        return judge_module.finalize_judge(model, rules, threshold=threshold)
+        return judge_module.finalize_judge(model, rules, threshold=threshold, context=context)
     return judge_module.combine(
         rules,
         model,
         weight=judge_module.normalize_weight(settings.get("judge_weight")),
         threshold=threshold,
+        context=context,
     )
 
 

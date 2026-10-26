@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
+
+import pytest
 
 from stock_senate.roles.llm import RoleLLMResolver
 from stock_senate.workflow.compress import (
@@ -106,6 +109,52 @@ def test_citations_can_be_dropped_when_configured() -> None:
     )
     text = json.dumps(payload, ensure_ascii=False)
     assert "https://example.com/0/0" not in text
+
+
+def test_the_assembled_payload_gets_its_own_ceiling() -> None:
+    context = _digest(domains=8, facts=6)
+    settings = {"trigger_tokens": 200, "chunk_tokens": 8000, "max_output_tokens": 2000}
+    payload, record = compress_context(context, settings)
+    assert record.triggered is True
+    assert record.capped is False
+    assert record.compressed_tokens <= 2000
+    assert _tokens(payload) <= 2000
+
+
+def test_citations_alone_can_hold_the_payload_over_the_ceiling(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    context = {
+        "digest": {
+            "d": {
+                "citations": [f"https://example.com/{index}" for index in range(400)],
+                "facts": ["一条事实"],
+            }
+        }
+    }
+
+    with caplog.at_level(logging.WARNING, logger="stock_senate.compression"):
+        payload, record = compress_context(
+            context,
+            {"trigger_tokens": 10, "chunk_tokens": 5, "max_output_tokens": 60},
+        )
+
+    assert record.triggered is True
+    # Keeping citations verbatim is deliberate, so the record says the ceiling
+    # could not be met instead of silently dropping the audit trail.
+    assert record.capped is True
+    assert _tokens(payload) > 60
+    assert any("max_output_tokens" in item.getMessage() for item in caplog.records)
+
+
+def test_dropping_citations_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, logger="stock_senate.compression"):
+        compress_context(
+            _digest(domains=1, facts=1),
+            {"trigger_tokens": 50, "chunk_tokens": 40, "keep_citations": False},
+        )
+
+    assert any("citation" in item.getMessage() for item in caplog.records)
 
 
 def test_resolver_prompt_reports_compression_without_touching_offline() -> None:

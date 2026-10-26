@@ -27,6 +27,7 @@ DEFAULT_PATH = "memory/reflections.jsonl"
 _MAX_TEXT = 240
 _MAX_ITEMS = 3
 _MAX_SCAN_LINES = 2000
+_MAX_ENTRIES_CAP = 50
 
 
 def memory_settings(config: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -108,17 +109,26 @@ def build_reflection(
 
 
 def injectable(entries: Sequence[Mapping[str, Any]], limit: int) -> list[dict[str, Any]]:
-    """Project stored reflections onto the small shape prompts receive."""
+    """Project stored reflections onto the small shape prompts receive.
+
+    The file is plain JSONL that a user can edit, so every field is re-scanned
+    on read: a hand-written price level must not become prompt content.
+    """
     out: list[dict[str, Any]] = []
     for entry in entries[-max(0, limit) :]:
+        stored = entry.get("lessons")
+        raw_lessons = stored[:2] if isinstance(stored, (list, tuple)) else []
+        lessons = [
+            text for item in raw_lessons if isinstance(item, str) and (text := _clean(item, 160))
+        ]
         out.append(
             {
-                "date": entry.get("date"),
-                "rating": entry.get("rating"),
-                "stance": entry.get("stance"),
+                "date": _clean(entry.get("date"), 10),
+                "rating": _clean(entry.get("rating"), 32),
+                "stance": _clean(entry.get("stance"), 32) or "unknown",
                 "quality_score": entry.get("quality_score"),
                 "low_quality": entry.get("low_quality"),
-                "lessons": list(entry.get("lessons") or [])[:2],
+                "lessons": lessons,
             }
         )
     return out
@@ -135,11 +145,17 @@ class MemoryStore:
 
     @property
     def path(self) -> Path:
-        configured = str((self.settings or {}).get("path") or DEFAULT_PATH)
-        if configured.startswith("~"):
-            return Path(configured).expanduser()
+        configured = str((self.settings or {}).get("path") or DEFAULT_PATH).strip()
+        configured = configured.replace("\\", "/")
         candidate = Path(configured)
-        return candidate if candidate.is_absolute() else Path(self.home) / candidate
+        rooted = configured.startswith(("/", "~")) or (len(configured) > 1 and configured[1] == ":")
+        if rooted or candidate.is_absolute() or ".." in candidate.parts:
+            get_logger("memory").warning(
+                "memory path must stay under the state root; using the default",
+                extra={"event": "memory_path_rejected"},
+            )
+            return Path(self.home) / DEFAULT_PATH
+        return Path(self.home) / candidate
 
     @property
     def max_entries(self) -> int:
@@ -147,7 +163,7 @@ class MemoryStore:
             value = int((self.settings or {}).get("max_entries", DEFAULT_MAX_ENTRIES))
         except (TypeError, ValueError):
             return DEFAULT_MAX_ENTRIES
-        return max(0, value)
+        return min(max(0, value), _MAX_ENTRIES_CAP)
 
     def recent(self, *, code: str | None = None, limit: int | None = None) -> list[dict[str, Any]]:
         if not self.enabled:
@@ -163,7 +179,10 @@ class MemoryStore:
             )
             return []
 
-        wanted = self.max_entries if limit is None else max(0, limit)
+        if limit is None:
+            wanted = self.max_entries
+        else:
+            wanted = min(max(0, limit), _MAX_ENTRIES_CAP)
         entries: list[dict[str, Any]] = []
         for line in lines[-_MAX_SCAN_LINES:]:
             text = line.strip()

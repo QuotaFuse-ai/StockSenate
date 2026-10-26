@@ -7,6 +7,8 @@ pin the contract:
 * ``judge`` scores from the model's rubric and keeps its located defects;
 * structural blockers found by the rules cannot be outvoted by a generous
   judge, and a compliance finding always forces ``low_quality``;
+* prohibited wording in the report body is found by the rules even when the
+  judge reports none, and ``hybrid`` caps how far the judge may outrun them;
 * ``hybrid`` blends the two scores with the configured weight;
 * every way the judge can fail - offline provider, unusable object, payload
   that does not validate - falls back to the rules verdict with a note.
@@ -26,6 +28,7 @@ from stock_senate.roles.registry import RoleRegistry, RoleSpec
 from stock_senate.roles.schemas import (
     AnalystReport,
     Citation,
+    FinalDecision,
     ResearchVerdict,
     RiskArgument,
     TradePlan,
@@ -151,6 +154,7 @@ def _run(
     digest: dict | None = None,
     weight: float = 0.5,
     threshold: float = 70,
+    decision: FinalDecision | None = None,
 ) -> tuple[Any, StubResolver, RunContext]:
     resolver = StubResolver(payload, provider=provider)
     ctx = _ctx(_config(mode, weight=weight, threshold=threshold), resolver, digest)
@@ -160,6 +164,7 @@ def _run(
         ResearchVerdict(role="research_manager", stance="bullish", rationale=["证据一致"]),
         TradePlan(role="trader", direction="long", rationale=["趋势确认"]),
         [RiskArgument(role="risk_neutral", side="neutral", points=["波动率偏高"])],
+        decision,
     )
     return result, resolver, ctx
 
@@ -223,6 +228,81 @@ def test_judge_mode_flags_executable_prices() -> None:
 
     assert result.low_quality is True
     assert "可执行价位" in result.notes
+
+
+def test_deterministic_scan_reads_the_report_text_the_judge_scores() -> None:
+    hits = judge.deterministic_compliance(
+        {
+            "analysts": [
+                {
+                    "summary": "机构给出的目标价为 12 元。",
+                    "facts": [{"label": "备注", "value": "止损位 9 元"}],
+                }
+            ],
+            "decision": {"reasons": ["估值合理。"], "risks": ["仓位建议 30%。"]},
+        }
+    )
+
+    assert set(hits) == {"目标价", "止损位", "仓位建议"}
+    assert judge.deterministic_compliance(None) == []
+
+
+def test_judge_mode_scans_the_report_when_the_judge_misses_a_price() -> None:
+    result, _resolver, _ctx_ = _run(
+        "judge",
+        decision=FinalDecision(
+            role="portfolio_manager",
+            rating="hold",
+            reasons=["目标价 12.00 元。"],
+            risks=["行业需求仍有波动。"],
+        ),
+    )
+
+    assert result.low_quality is True
+    assert result.compliance["price_levels_found"] is True
+    assert "报告正文" in result.notes
+    assert "目标价" in result.notes
+
+
+def test_hybrid_mode_scans_the_report_when_the_judge_misses_a_price() -> None:
+    result, _resolver, _ctx_ = _run(
+        "hybrid",
+        weight=0.85,
+        decision=FinalDecision(
+            role="portfolio_manager",
+            rating="hold",
+            reasons=["营收增速与现金流匹配。"],
+            risks=["止损位 9.50 元。"],
+        ),
+    )
+
+    # Without the deterministic scan this blend would score 93.2 and pass.
+    assert result.score > 90
+    assert result.low_quality is True
+    assert result.compliance["price_levels_found"] is True
+    assert "止损位" in result.notes
+
+
+def test_hybrid_caps_an_inflated_judge_at_the_rules_anchor() -> None:
+    result, _resolver, _ctx_ = _run(
+        "hybrid",
+        payload=_judge_payload(
+            score=100.0,
+            dimensions={
+                "logic_coherence": {"score": 100.0, "note": "链条完整"},
+                "evidence_sufficiency": {"score": 100.0, "note": "证据充分"},
+                "citation_accuracy": {"score": 100.0, "note": "引用齐全"},
+            },
+        ),
+        digest=THIN_DIGEST,
+        weight=0.5,
+    )
+
+    # Rules score 60.0, so the judge may count at most 85.0: (60 + 85) / 2.
+    assert result.score == 72.5
+    assert result.dimensions["evidence_sufficiency"].score == 42.5
+    assert "允许上浮" in result.notes
+    assert result.low_quality is True
 
 
 def test_hybrid_mode_blends_scores_with_the_configured_weight() -> None:

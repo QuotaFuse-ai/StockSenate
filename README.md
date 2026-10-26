@@ -230,9 +230,9 @@ tradingagents analyze 600000     # 可用，启动时打印弃用警告并提示
 
 | 能力 | 配置节 | 行为 |
 |---|---|---|
-| 上下文压缩 | `[compression]` | 超过 `trigger_tokens` 按证据单元切块压到 `chunk_tokens`，引用与来源字段原样保留；只影响远程模型调用，离线 provider 不经过压缩。 |
-| 长期反思记忆 | `[memory]` | 每次运行结束向 `memory/reflections.jsonl` 追加一条，下一次同标的分析注入最近 `max_entries` 条；追加式 JSONL，写入前过合规过滤。 |
-| 质量门 | `[quality_gate]` | `mode = rules / judge / hybrid`；`judge` 与 `hybrid` 调用评审角色按 rubric 打分，模型不可用时回退 `rules` 并注明原因。 |
+| 上下文压缩 | `[compression]` | 超过 `trigger_tokens` 按证据单元切块压到 `chunk_tokens`，引用与来源字段原样保留；拼接后的整体再受 `max_output_tokens` 硬上限约束，压不下来时记录 `capped` 并告警。只影响远程模型调用，离线 provider 不经过压缩。 |
+| 长期反思记忆 | `[memory]` | 每次运行结束向 `memory/reflections.jsonl` 追加一条，下一次同标的分析注入最近 `max_entries` 条（上限 50）；路径必须是 state 根目录下的相对路径，绝对路径、`~` 与 `..` 一律回退默认值；追加式 JSONL，写入与读取两侧都过合规过滤。 |
+| 质量门 | `[quality_gate]` | `mode = rules / judge / hybrid`；`judge` 与 `hybrid` 调用评审角色按 rubric 打分，模型不可用时回退 `rules` 并注明原因。报告正文的可执行价位用语由规则侧确定性扫描兜底，评审漏报也会标记 `low_quality`；`hybrid` 下评审分相对规则分最多上浮 25 分，正文里的诱导性文字无法抬高总分。 |
 | 追踪导出 | `[tracing]` | 默认关闭；`exporter = jsonl / otlp`。`otlp` 兼容 OpenTelemetry Collector 与 Langfuse，鉴权头从 `headers_env` 指定的环境变量读取，不落配置文件。 |
 | 人工审批 | `[hitl]` | 检查点可在 CLI 终端或 WebUI「审批」页处理；非交互环境按 `on_timeout` 放行，并在报告与审计中留痕。 |
 
@@ -244,15 +244,15 @@ tradingagents analyze 600000     # 可用，启动时打印弃用警告并提示
 
 ```python
 class DataEnvelope(BaseModel):
-    domain: str              # kline / financial / announcement / research / risk_event ...
+    domain: str  # kline / financial / announcement / research / risk_event ...
     code: str
     data_as_of: date
     payload: dict
-    source: str              # tickhub_cn / tickhub_us / json / text_doc / sql
+    source: str  # tickhub_cn / tickhub_us / json / text_doc / sql
     source_detail: str
     fetched_at: datetime
-    freshness: str           # realtime / cached / archive
-    confidence: str          # high / medium / low
+    freshness: str  # realtime / cached / archive
+    confidence: str  # high / medium / low
     data_source_status: str  # ok / degraded / missing
 ```
 

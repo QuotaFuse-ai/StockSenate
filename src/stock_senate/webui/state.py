@@ -40,7 +40,13 @@ STAGE_ORDER: tuple[str, ...] = (
 )
 MAX_JOBS = 200
 MAX_REVIEWS = 200
+MAX_ACTIVE_JOBS = 4
+MAX_PENDING_REVIEWS = 8
 _DECIDED = frozenset({"approved", "rejected", "abort"})
+
+
+class JobLimitExceeded(RuntimeError):
+    """Raised when the process already runs the maximum number of analyses."""
 
 
 def _now() -> str:
@@ -72,6 +78,7 @@ class AnalysisJob:
     events: list[dict[str, Any]] = field(default_factory=list)
     run_id: str | None = None
     rating: str | None = None
+    low_quality: bool = False
     error: str | None = None
     finished_at: str | None = None
     review_id: str | None = None
@@ -93,6 +100,7 @@ class AnalysisJob:
             "percent": percent,
             "run_id": self.run_id,
             "rating": self.rating,
+            "low_quality": self.low_quality,
             "error": self.error,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
@@ -175,6 +183,11 @@ class WebRuntime:
         normalized = normalize_code(code)
         job = AnalysisJob(job_id=uuid.uuid4().hex[:12], code=normalized, date=day)
         with self._lock:
+            active = sum(1 for item in self._jobs.values() if item.status in {"queued", "running"})
+            if active >= MAX_ACTIVE_JOBS:
+                raise JobLimitExceeded(
+                    f"同时运行的分析已达上限（{MAX_ACTIVE_JOBS} 个），请等待现有任务结束。"
+                )
             self._jobs[job.job_id] = job
             self._prune()
         thread = threading.Thread(
@@ -269,18 +282,33 @@ class WebRuntime:
         with self._lock:
             self._reviews[review.review_id] = review
             job.review_id = review.review_id
+            pending = sorted(
+                (item for item in self._reviews.values() if item.status == "pending"),
+                key=lambda item: item.created_at,
+            )
+            excess = len(pending) - MAX_PENDING_REVIEWS
+            for stale in pending:
+                if excess <= 0:
+                    break
+                if stale is review:
+                    continue
+                self._close_review_locked(stale, "expired", note="待复核队列已满，按超时策略处理")
+                excess -= 1
             self._prune_reviews()
         return review
 
     def _close_review(self, review: PendingReview, status: str, *, note: str = "") -> None:
         with self._lock:
-            if review.status != "pending":
-                return
-            review.status = status
-            review.decided_at = _now()
-            if note:
-                review.note = note
-            review.event.set()
+            self._close_review_locked(review, status, note=note)
+
+    def _close_review_locked(self, review: PendingReview, status: str, *, note: str = "") -> None:
+        if review.status != "pending":
+            return
+        review.status = status
+        review.decided_at = _now()
+        if note:
+            review.note = note
+        review.event.set()
 
     def _expire_reviews(self, job_id: str) -> None:
         with self._lock:
@@ -341,6 +369,7 @@ class WebRuntime:
                 job.status = "done"
                 job.stage = "done"
                 job.rating = str(decision.get("rating") or job.rating or "")
+                job.low_quality = bool(decision.get("low_quality", job.low_quality))
                 job.run_id = str(decision.get("run_id") or job.run_id or "") or job.run_id
                 job.finished_at = job.finished_at or _now()
         except Exception as exc:  # noqa: BLE001 - surfaced on the progress page
@@ -393,4 +422,11 @@ def today() -> str:
     return date.today().isoformat()
 
 
-__all__ = ["AnalysisJob", "PendingReview", "STAGE_ORDER", "WebRuntime", "today"]
+__all__ = [
+    "AnalysisJob",
+    "JobLimitExceeded",
+    "PendingReview",
+    "STAGE_ORDER",
+    "WebRuntime",
+    "today",
+]

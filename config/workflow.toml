@@ -67,6 +67,8 @@ dimensions = ["logic_coherence", "evidence_sufficiency", "citation_accuracy"]
 enabled = true
 trigger_tokens = 24000
 chunk_tokens = 6000
+# 拼接后整体仍超限时，压缩完的上下文再按此上限收紧。
+max_output_tokens = 24000
 keep_citations = true
 
 [memory]

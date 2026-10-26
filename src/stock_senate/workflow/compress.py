@@ -18,6 +18,8 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from stock_senate.observability.logging import get_logger
+
 CITATION_KEYS = frozenset(
     {
         "citation",
@@ -36,6 +38,9 @@ _CITATION_LISTS = frozenset({"citation", "citations"})
 
 DEFAULT_TRIGGER_TOKENS = 24000
 DEFAULT_CHUNK_TOKENS = 6000
+DEFAULT_MAX_OUTPUT_TOKENS = 24000
+
+log = get_logger("compression")
 
 
 def estimate_tokens(text: str) -> int:
@@ -62,6 +67,7 @@ class CompressionRecord:
     compressed_tokens: int
     chunks: int
     citations: int
+    capped: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -71,6 +77,7 @@ class CompressionRecord:
             "compressed_tokens": self.compressed_tokens,
             "chunks": self.chunks,
             "citations": self.citations,
+            "capped": self.capped,
         }
 
 
@@ -176,6 +183,30 @@ def _fit(chunk: dict[str, Any], budget: int, *, keep_citations: bool) -> dict[st
     return _shrink(chunk, max_string=32, max_items=1, keep_citations=keep_citations)
 
 
+def _clip(
+    payload: dict[str, Any], budget: int, *, keep_citations: bool
+) -> tuple[dict[str, Any], bool]:
+    """Shrink the assembled payload until it fits ``budget``.
+
+    Chunking bounds each chunk, not the sum: many small chunks can reassemble
+    to the original size, so the final payload gets its own hard ceiling.
+    ``capped`` reports a ceiling that citations alone keep out of reach.
+    """
+    if _tokens(payload) <= budget:
+        return payload, False
+    candidate = payload
+    for max_string, max_items in ((240, 12), (160, 8), (80, 4), (40, 2), (24, 1)):
+        candidate = _shrink(
+            payload,
+            max_string=max_string,
+            max_items=max_items,
+            keep_citations=keep_citations,
+        )
+        if _tokens(candidate) <= budget:
+            return candidate, False
+    return candidate, _tokens(candidate) > budget
+
+
 def _count_citations(value: Any) -> int:
     if isinstance(value, dict):
         total = 0
@@ -200,6 +231,7 @@ def compress_context(
     enabled = section.get("enabled", True) is not False
     trigger = int(section.get("trigger_tokens") or DEFAULT_TRIGGER_TOKENS)
     chunk_tokens = int(section.get("chunk_tokens") or DEFAULT_CHUNK_TOKENS)
+    max_output = int(section.get("max_output_tokens") or DEFAULT_MAX_OUTPUT_TOKENS)
     keep_citations = section.get("keep_citations", True) is not False
     original_tokens = _tokens(context)
 
@@ -219,6 +251,17 @@ def compress_context(
         fitted = _fit(chunk, chunk_tokens, keep_citations=keep_citations)
         for key, value in fitted.items():
             reduced = _append_unit(reduced, key, value)
+    reduced, capped = _clip(reduced, max(1, max_output), keep_citations=keep_citations)
+    if not keep_citations:
+        log.warning(
+            "compression drops citation fields; claims survive without their sources",
+            extra={"event": "compression_citations_dropped"},
+        )
+    if capped:
+        log.warning(
+            "compressed payload still exceeds max_output_tokens",
+            extra={"event": "compression_output_capped", "max_output_tokens": max_output},
+        )
 
     return reduced, CompressionRecord(
         enabled=True,
@@ -227,12 +270,14 @@ def compress_context(
         compressed_tokens=_tokens(reduced),
         chunks=len(chunks),
         citations=_count_citations(reduced),
+        capped=capped,
     )
 
 
 __all__ = [
     "CITATION_KEYS",
     "CompressionRecord",
+    "DEFAULT_MAX_OUTPUT_TOKENS",
     "compress_context",
     "estimate_tokens",
     "settings_from_config",

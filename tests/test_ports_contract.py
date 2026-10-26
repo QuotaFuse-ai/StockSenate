@@ -79,7 +79,7 @@ def test_compose_healthcheck_hits_a_route_the_app_serves(
     shutil.copytree(ROOT / "config", config)
 
     app = create_app(WebRuntime(config_dir=config))
-    with TestClient(app, follow_redirects=False) as client:
+    with TestClient(app, base_url="http://127.0.0.1", follow_redirects=False) as client:
         response = client.get(compose_healthcheck_path())
 
     assert response.status_code == 200

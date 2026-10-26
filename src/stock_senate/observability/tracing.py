@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import time
+import urllib.error
 import urllib.request
 import uuid
 from collections.abc import Callable, Iterator, Mapping
@@ -34,6 +35,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 from stock_senate.observability.logging import get_trace_id, redact
 from stock_senate.version import __version__
@@ -148,6 +150,9 @@ class OtlpExporter:
         target = str(endpoint or "").strip().rstrip("/")
         if not target:
             raise ValueError("otlp 导出器需要 endpoint（Collector 或 Langfuse 的 OTLP 地址）")
+        scheme = urlsplit(target).scheme.lower()
+        if scheme not in {"http", "https"}:
+            raise ValueError(f"otlp endpoint 只支持 http/https，收到 {scheme or '空 scheme'!r}")
         self.url = target if target.endswith("/v1/traces") else f"{target}/v1/traces"
         self.headers = dict(headers or {})
         self.service_name = service_name or "stocksenate"
@@ -191,6 +196,7 @@ class OtlpExporter:
 
     def _span(self, span: Span) -> dict[str, Any]:
         end = span.end_ns or _now_ns()
+        attributes = redact(dict(span.attributes)) if span.attributes else {}
         return {
             "traceId": span.trace_id,
             "spanId": span.span_id,
@@ -199,14 +205,30 @@ class OtlpExporter:
             "kind": 1,
             "startTimeUnixNano": str(span.start_ns),
             "endTimeUnixNano": str(end),
-            "attributes": [_attr(key, value) for key, value in span.attributes.items()],
+            "attributes": [_attr(key, value) for key, value in attributes.items()],
             "status": {"code": 2 if span.status == "error" else 1, "message": span.error},
         }
 
     def _post(self, url: str, body: bytes, headers: Mapping[str, str]) -> None:
         request = urllib.request.Request(url, data=body, headers=dict(headers), method="POST")
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:
+        opener = urllib.request.build_opener(_NoRedirect())
+        with opener.open(request, timeout=self.timeout) as response:
             response.read(1)
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects: a collector must not be able to steer the export elsewhere."""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> None:
+        raise urllib.error.HTTPError(newurl, code, "otlp export refuses redirects", headers, fp)
 
 
 _current_span: ContextVar[Span | None] = ContextVar("stock_senate_current_span", default=None)

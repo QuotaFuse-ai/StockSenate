@@ -163,6 +163,67 @@ def test_a_failed_write_never_raises(tmp_path: Path) -> None:
     assert MemoryStore(tmp_path).remember(_reflection()) is False
 
 
+@pytest.mark.parametrize(
+    "configured",
+    [
+        "../escape.jsonl",
+        "../../etc/passwd",
+        "/etc/passwd",
+        "~/reflections.jsonl",
+        "C:/temp/mem.jsonl",
+        "memory\\..\\..\\escape.jsonl",
+    ],
+)
+def test_store_keeps_its_file_under_the_state_root(tmp_path: Path, configured: str) -> None:
+    store = MemoryStore(tmp_path, {"path": configured})
+
+    assert store.path == tmp_path / "memory" / "reflections.jsonl"
+    assert store.remember(_reflection()) is True
+    assert (tmp_path / "memory" / "reflections.jsonl").is_file()
+
+
+def test_store_caps_max_entries(tmp_path: Path) -> None:
+    store = MemoryStore(tmp_path, {"max_entries": 10_000})
+    for index in range(60):
+        store.remember(_reflection(date=f"2026-01-{index % 28 + 1:02d}"))
+
+    assert store.max_entries == 50
+    assert len(store.recent(code=CODE)) == 50
+    assert len(store.recent(code=CODE, limit=10_000)) == 50
+    assert store.recent(code=CODE, limit=0) == []
+
+
+def test_injectable_drops_a_hand_edited_price_level() -> None:
+    entries: list[dict[str, Any]] = [
+        {
+            "code": CODE,
+            "date": "2026-10-20",
+            "rating": "hold",
+            "stance": "目标价 12.00 元",
+            "quality_score": 80.0,
+            "low_quality": False,
+            "lessons": ["继续跟踪现金流", "止损位 9.50 元", {"nested": "hand edit"}],
+        },
+        {
+            "code": CODE,
+            "date": "2026-10-21",
+            "rating": "hold",
+            "stance": "中性偏多",
+            "quality_score": 78.0,
+            "low_quality": False,
+            "lessons": [{"nested": "hand edit"}, "补充下一季度的毛利率证据"],
+        },
+        {"code": CODE, "date": "2026-10-22", "lessons": "目标价 12.00 元"},
+    ]
+
+    projected = injectable(entries, 5)
+
+    assert projected[0]["stance"] == "unknown"
+    assert projected[0]["lessons"] == ["继续跟踪现金流"]
+    assert projected[1]["lessons"] == ["补充下一季度的毛利率证据"]
+    assert projected[2]["lessons"] == []
+
+
 def test_injectable_projects_the_prompt_shape() -> None:
     entries = [
         _reflection(

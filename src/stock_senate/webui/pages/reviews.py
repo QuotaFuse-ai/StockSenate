@@ -111,8 +111,8 @@ def _decided(reviews: list[PendingReview]) -> Html:
 
 def _body(request: Request) -> Html:
     service = runtime(request)
+    pending = service.pending_reviews()
     everything = service.reviews(limit=50)
-    pending = [review for review in everything if review.status == "pending"]
     return Html(
         f"<h2>待复核（{len(pending)}）</h2>"
         + str(_pending(request, pending))

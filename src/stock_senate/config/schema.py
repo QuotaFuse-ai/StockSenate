@@ -148,6 +148,7 @@ _KNOWN_KEYS: dict[str, dict[str, Any]] = {
             "enabled": None,
             "trigger_tokens": None,
             "chunk_tokens": None,
+            "max_output_tokens": None,
             "keep_citations": None,
         },
         "memory": {
@@ -566,6 +567,16 @@ def _check_workflow(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
             _error(errors, "workflow.toml", "hitl.checkpoints", f"未知检查点 `{checkpoint}`")
     if hitl.get("on_timeout") not in {"auto_approve", "abort", None}:
         _error(errors, "workflow.toml", "hitl.on_timeout", "可选 auto_approve / abort")
+    hitl_timeout = hitl.get("timeout_seconds", 1800)
+    if not isinstance(hitl_timeout, (int, float)) or isinstance(hitl_timeout, bool):
+        _error(errors, "workflow.toml", "hitl.timeout_seconds", "必须是 > 0 的秒数")
+    elif hitl_timeout <= 0:
+        _error(
+            errors,
+            "workflow.toml",
+            "hitl.timeout_seconds",
+            "必须是 > 0 的秒数；0 或负数会关闭人工复核的截止时间",
+        )
 
     checkpoint = data.get("checkpoint", {})
     if checkpoint.get("enabled") is True:
@@ -623,6 +634,14 @@ def _check_workflow(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
     for key, value in (("trigger_tokens", trigger), ("chunk_tokens", chunk)):
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
             _error(errors, "workflow.toml", f"compression.{key}", "必须是 > 0 的整数")
+    max_output = compression.get("max_output_tokens", 24000)
+    if not isinstance(max_output, int) or isinstance(max_output, bool) or max_output <= 0:
+        _error(
+            errors,
+            "workflow.toml",
+            "compression.max_output_tokens",
+            "必须是 > 0 的整数，压缩结果的硬上限",
+        )
     if (
         isinstance(trigger, int)
         and isinstance(chunk, int)
@@ -641,8 +660,21 @@ def _check_workflow(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
     memory = data.get("memory", {})
     if not isinstance(memory.get("enabled", True), bool):
         _error(errors, "workflow.toml", "memory.enabled", "必须是布尔值")
-    if not str(memory.get("path") or "memory/reflections.jsonl").strip():
+    memory_path = str(memory.get("path") or "memory/reflections.jsonl").strip()
+    normalized = memory_path.replace("\\", "/")
+    if not memory_path:
         _error(errors, "workflow.toml", "memory.path", "不能为空")
+    elif (
+        normalized.startswith(("/", "~"))
+        or (len(normalized) > 1 and normalized[1] == ":")
+        or ".." in Path(normalized).parts
+    ):
+        _error(
+            errors,
+            "workflow.toml",
+            "memory.path",
+            "必须是 state 根目录下的相对路径，不允许绝对路径、~ 或 ..",
+        )
     entries = memory.get("max_entries", 6)
     if not isinstance(entries, int) or isinstance(entries, bool) or entries < 0:
         _error(errors, "workflow.toml", "memory.max_entries", "必须是 >= 0 的整数")

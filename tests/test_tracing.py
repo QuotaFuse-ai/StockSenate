@@ -16,7 +16,11 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+import urllib.error
+import urllib.request
 from collections.abc import Iterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +32,7 @@ from stock_senate.observability.tracing import (
     OtlpExporter,
     Span,
     Tracer,
+    _NoRedirect,
     configure_tracing,
     get_tracer,
     reset_tracing,
@@ -306,3 +311,60 @@ def test_jsonl_exporter_appends_one_object_per_span(tmp_path: Path) -> None:
     records = _read_spans(path)
     assert [item["name"] for item in records] == ["first", "second"]
     assert records[1]["attributes"] == {"stage": "risk"}
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    ["file:///tmp/spans.jsonl", "ftp://collector.example", "collector.example:4318", ""],
+)
+def test_otlp_only_accepts_an_http_endpoint(endpoint: str) -> None:
+    with pytest.raises(ValueError):
+        OtlpExporter(endpoint)
+
+
+def test_otlp_redacts_span_attributes() -> None:
+    calls: list[bytes] = []
+    exporter = OtlpExporter(
+        "https://collector.example:4318",
+        transport=lambda url, body, headers: calls.append(body),
+    )
+
+    with Tracer(exporter).span("llm.market", {"api_key": "sk-live-1234567890", "code": CODE}):
+        pass
+
+    serialized = json.loads(calls[0])["resourceSpans"][0]["scopeSpans"][0]["spans"][0]
+    values = {item["key"]: item["value"] for item in serialized["attributes"]}
+    assert values["api_key"] == {"stringValue": "***"}
+    assert values["code"] == {"stringValue": CODE}
+
+
+def test_otlp_refuses_a_redirecting_collector() -> None:
+    class _Redirecting(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802 - http.server naming
+            # Drain the body before closing: an unread request makes Windows
+            # reset the connection and the client sees an abort instead of 302.
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            body = b'{"redirect":"refused"}'
+            self.send_response(302)
+            self.send_header("Location", "https://evil.example/v1/traces")
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: object) -> None:
+            return None
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Redirecting)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        exporter = OtlpExporter(f"http://127.0.0.1:{server.server_port}/v1/traces")
+        exporter.export(Span(name="unit", trace_id="t", span_id="s", parent_id=None, start_ns=1))
+        with pytest.raises(urllib.error.HTTPError):
+            exporter.flush()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert issubclass(_NoRedirect, urllib.request.HTTPRedirectHandler)
