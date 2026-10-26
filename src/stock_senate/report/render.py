@@ -311,9 +311,11 @@ def _render_quality(state: Mapping[str, Any], title: str) -> list[str]:
     if not quality:
         return []
     out = [f"## {title}", ""]
+    mode = str(quality.get("mode") or "rules")
+    suffix = "" if mode == "rules" else f" · 评分方式 {mode}"
     out.append(
         f"- 质量分：{quality.get('score', 0)} / 阈值 {quality.get('threshold', 0)}"
-        f"{' · low_quality' if quality.get('low_quality') else ''}"
+        f"{' · low_quality' if quality.get('low_quality') else ''}{suffix}"
     )
     dimensions = dict(quality.get("dimensions") or {})
     if dimensions:
@@ -324,6 +326,14 @@ def _render_quality(state: Mapping[str, Any], title: str) -> list[str]:
         ]
         out.append("")
         out.extend(_table(["维度", "分数", "说明"], rows))
+    defects = [item for item in quality.get("defects") or [] if isinstance(item, Mapping)]
+    if defects:
+        rows = [
+            [item.get("dimension"), item.get("location"), item.get("issue"), item.get("fix_hint")]
+            for item in defects
+        ]
+        out.append("")
+        out.extend(_table(["维度", "位置", "问题", "修复建议"], rows))
     if quality.get("notes"):
         out.append("")
         out.append(_safe(quality["notes"]))

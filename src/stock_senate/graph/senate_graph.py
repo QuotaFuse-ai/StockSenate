@@ -23,6 +23,8 @@ from stock_senate.data.codes import normalize_code
 from stock_senate.data.envelope import date_only
 from stock_senate.data.router import DataAccessLayer, summarize
 from stock_senate.observability.logging import configure_from_config, new_trace_id, redact
+from stock_senate.observability.tracing import configure_tracing
+from stock_senate.observability.tracing import span as trace_span
 from stock_senate.roles.llm import LLMConfigError, LLMRateLimited
 from stock_senate.roles.registry import RoleError, RoleRegistry
 from stock_senate.roles.schemas import (
@@ -40,6 +42,12 @@ from stock_senate.workflow.checkpoint import CheckpointState, store_from_config
 from stock_senate.workflow.context import RunContext
 from stock_senate.workflow.digest import build_digest
 from stock_senate.workflow.hitl import HitlReviewer, Reviewer, hitl_blocked
+from stock_senate.workflow.memory import (
+    MemoryStore,
+    build_reflection,
+    injectable,
+    memory_settings,
+)
 from stock_senate.workflow.nodes import (
     NodeConfigError,
     run_analysts,
@@ -85,6 +93,8 @@ class SenateGraph:
         # Opt-in file sink; stdout stays untouched and a stock install keeps
         # writing to stderr only.
         configure_from_config(self.config)
+        # Opt-in tracing; a collector that cannot be reached never fails a run.
+        configure_tracing(self.config)
 
     # ------------------------------------------------------------------ #
     # public API
@@ -150,6 +160,9 @@ class SenateGraph:
             progress, "data", "done", domains=len(envelopes), data_status=data_status["status"]
         )
 
+        memory_store = MemoryStore(home, memory_settings(self.config))
+        prior_reflections = memory_store.recent(code=code, limit=memory_store.max_entries)
+
         ctx = RunContext(
             code=code,
             date=as_of,
@@ -163,6 +176,7 @@ class SenateGraph:
             budget=budget,
             trace_id=trace_id,
             home=home,
+            memory=injectable(prior_reflections, memory_store.max_entries),
         )
 
         reviewer = HitlReviewer(self.config, enabled=hitl, handler=hitl_handler)
@@ -226,123 +240,134 @@ class SenateGraph:
 
         stage = "analysts"
         try:
-            if "analysts" in cached.stages:
-                analysts = _restore_analysts(ctx, cached.stages["analysts"])
-                _progress(progress, stage, "done", seats=len(analysts), restored=True)
-            else:
-                _progress(progress, stage, "running")
-                analysts = run_analysts(ctx)
-                saved(
-                    stage,
-                    {
-                        "reports": [report.model_dump() for report in analysts],
-                        "skipped": list(ctx.skipped),
-                    },
-                )
-                _progress(progress, stage, "done", seats=len(analysts))
+            with _stage_span(stage):
+                if "analysts" in cached.stages:
+                    analysts = _restore_analysts(ctx, cached.stages["analysts"])
+                    _progress(progress, stage, "done", seats=len(analysts), restored=True)
+                else:
+                    _progress(progress, stage, "running")
+                    analysts = run_analysts(ctx)
+                    saved(
+                        stage,
+                        {
+                            "reports": [report.model_dump() for report in analysts],
+                            "skipped": list(ctx.skipped),
+                        },
+                    )
+                    _progress(progress, stage, "done", seats=len(analysts))
 
             stage = "debate"
-            if "debate" in cached.stages:
-                debate = _restore_debate(cached.stages["debate"])
-                _progress(progress, stage, "done", restored=True)
-            else:
-                _progress(progress, stage, "running")
-                debate = run_bull_bear_debate(ctx, analysts)
-                saved(stage, debate.as_dict())
-                _progress(progress, stage, "done")
+            with _stage_span(stage):
+                if "debate" in cached.stages:
+                    debate = _restore_debate(cached.stages["debate"])
+                    _progress(progress, stage, "done", restored=True)
+                else:
+                    _progress(progress, stage, "running")
+                    debate = run_bull_bear_debate(ctx, analysts)
+                    saved(stage, debate.as_dict())
+                    _progress(progress, stage, "done")
 
             stage = "research"
-            if "research" in cached.stages:
-                research = ResearchVerdict.model_validate(cached.stages["research"])
-                _progress(progress, stage, "done", restored=True)
-            else:
-                _progress(progress, stage, "running")
-                research = run_research_manager(ctx, analysts, debate)
-                saved(stage, research.model_dump())
-                _progress(progress, stage, "done")
+            with _stage_span(stage):
+                if "research" in cached.stages:
+                    research = ResearchVerdict.model_validate(cached.stages["research"])
+                    _progress(progress, stage, "done", restored=True)
+                else:
+                    _progress(progress, stage, "running")
+                    research = run_research_manager(ctx, analysts, debate)
+                    saved(stage, research.model_dump())
+                    _progress(progress, stage, "done")
 
             stage = "trader"
-            if "trader" in cached.stages:
-                trade = TradePlan.model_validate(cached.stages["trader"])
-                _progress(progress, stage, "done", restored=True)
-            else:
-                _progress(progress, stage, "running")
-                trade = run_trader(ctx, research, analysts)
-                saved(stage, trade.model_dump())
-                _progress(progress, stage, "done")
+            with _stage_span(stage):
+                if "trader" in cached.stages:
+                    trade = TradePlan.model_validate(cached.stages["trader"])
+                    _progress(progress, stage, "done", restored=True)
+                else:
+                    _progress(progress, stage, "running")
+                    trade = run_trader(ctx, research, analysts)
+                    saved(stage, trade.model_dump())
+                    _progress(progress, stage, "done")
 
             stage = "hitl_after_trader"
-            hitl_trace(
-                stage,
-                "after_trader",
-                {
-                    "code": code,
-                    "date": as_of,
-                    "research": research.model_dump(),
-                    "trade": trade.model_dump(),
-                    "data": ctx.data_summary(),
-                },
-            )
+            with _stage_span(stage, checkpoint="after_trader"):
+                hitl_trace(
+                    stage,
+                    "after_trader",
+                    {
+                        "code": code,
+                        "date": as_of,
+                        "research": research.model_dump(),
+                        "trade": trade.model_dump(),
+                        "data": ctx.data_summary(),
+                    },
+                )
 
             stage = "risk"
-            if "risk" in cached.stages:
-                risk = _restore_risk_debate(cached.stages["risk"])
-                _progress(progress, stage, "done", arguments=len(risk.arguments), restored=True)
-            else:
-                _progress(progress, stage, "running")
-                risk = run_risk_debate(ctx, research, trade)
-                saved(stage, risk.as_dict())
-                _progress(progress, stage, "done", arguments=len(risk.arguments))
+            with _stage_span(stage):
+                if "risk" in cached.stages:
+                    risk = _restore_risk_debate(cached.stages["risk"])
+                    _progress(progress, stage, "done", arguments=len(risk.arguments), restored=True)
+                else:
+                    _progress(progress, stage, "running")
+                    risk = run_risk_debate(ctx, research, trade)
+                    saved(stage, risk.as_dict())
+                    _progress(progress, stage, "done", arguments=len(risk.arguments))
 
             stage = "hitl_before_final"
-            hitl_trace(
-                stage,
-                "before_final",
-                {
-                    "code": code,
-                    "date": as_of,
-                    "research": research.model_dump(),
-                    "trade": trade.model_dump(),
-                    "risks": [argument.model_dump() for argument in risk.arguments],
-                },
-            )
+            with _stage_span(stage, checkpoint="before_final"):
+                hitl_trace(
+                    stage,
+                    "before_final",
+                    {
+                        "code": code,
+                        "date": as_of,
+                        "research": research.model_dump(),
+                        "trade": trade.model_dump(),
+                        "risks": [argument.model_dump() for argument in risk.arguments],
+                    },
+                )
 
             hitl_payload = reviewer.summary(traces)
             stage = "portfolio_manager"
-            if "portfolio_manager" in cached.stages:
-                decision = FinalDecision.model_validate(cached.stages["portfolio_manager"])
-                _progress(progress, stage, "done", rating=decision.rating, restored=True)
-            else:
-                _progress(progress, stage, "running")
-                if hitl_blocked(traces):
-                    decision = FinalDecision(
-                        role="portfolio_manager",
-                        partial=True,
-                        rating="unknown",
-                        horizon="unknown",
-                        reasons=["人工复核未通过，终审被拦截。"],
-                        risks=["HITL 决策为拒绝或中止，本次不给出研究评级。"],
-                        confidence=0.0,
-                        low_quality=True,
-                        hitl=hitl_payload,
-                        notes="终审因人工介入被拦截",
-                    )
+            with _stage_span(stage):
+                if "portfolio_manager" in cached.stages:
+                    decision = FinalDecision.model_validate(cached.stages["portfolio_manager"])
+                    _progress(progress, stage, "done", rating=decision.rating, restored=True)
                 else:
-                    decision = run_portfolio_manager(
-                        ctx, research, trade, risk.arguments, hitl=hitl_payload
-                    )
-                saved(stage, decision.model_dump())
-                _progress(progress, stage, "done", rating=decision.rating)
+                    _progress(progress, stage, "running")
+                    if hitl_blocked(traces):
+                        decision = FinalDecision(
+                            role="portfolio_manager",
+                            partial=True,
+                            rating="unknown",
+                            horizon="unknown",
+                            reasons=["人工复核未通过，终审被拦截。"],
+                            risks=["HITL 决策为拒绝或中止，本次不给出研究评级。"],
+                            confidence=0.0,
+                            low_quality=True,
+                            hitl=hitl_payload,
+                            notes="终审因人工介入被拦截",
+                        )
+                    else:
+                        decision = run_portfolio_manager(
+                            ctx, research, trade, risk.arguments, hitl=hitl_payload
+                        )
+                    saved(stage, decision.model_dump())
+                    _progress(progress, stage, "done", rating=decision.rating)
 
             stage = "quality_gate"
-            if "quality_gate" in cached.stages:
-                quality = QualityVerdict.model_validate(cached.stages["quality_gate"])
-                _progress(progress, stage, "done", score=quality.score, restored=True)
-            else:
-                _progress(progress, stage, "running")
-                quality = run_quality_gate(ctx, analysts, research, trade, risk.arguments, decision)
-                saved(stage, quality.model_dump())
-                _progress(progress, stage, "done", score=quality.score)
+            with _stage_span(stage):
+                if "quality_gate" in cached.stages:
+                    quality = QualityVerdict.model_validate(cached.stages["quality_gate"])
+                    _progress(progress, stage, "done", score=quality.score, restored=True)
+                else:
+                    _progress(progress, stage, "running")
+                    quality = run_quality_gate(
+                        ctx, analysts, research, trade, risk.arguments, decision
+                    )
+                    saved(stage, quality.model_dump())
+                    _progress(progress, stage, "done", score=quality.score)
             if quality.low_quality and not decision.low_quality:
                 decision = decision.model_copy(update={"low_quality": True})
         except LLMRateLimited as exc:
@@ -366,6 +391,18 @@ class SenateGraph:
         # another HITL mode, or a verdict invalidated by a fresh review, is gone
         # from ``cached`` by now.
         resumed_stages = [name for name in cached.names if name != "_run_state"]
+
+        reflection = build_reflection(
+            code=code,
+            date=as_of,
+            run_id=run_id,
+            decision=decision.model_dump(),
+            quality=quality.model_dump(),
+            research=research.model_dump(),
+            trade=trade.model_dump(),
+            hitl=hitl_payload,
+        )
+        memory_saved = memory_store.remember(reflection)
 
         partial = (
             bool(decision.partial)
@@ -409,6 +446,11 @@ class SenateGraph:
             "decision": decision.model_dump(),
             "quality": quality.model_dump(),
             "hitl": hitl_payload,
+            "memory": {
+                "enabled": memory_store.enabled,
+                "injected": len(ctx.memory),
+                "stored": memory_saved,
+            },
             "budget": budget.snapshot(),
             "partial": partial,
             "generated_at": _now(),
@@ -540,6 +582,11 @@ def _progress(
         callback(str(stage), str(status), dict(fields))
     except Exception:  # noqa: BLE001 - a broken listener is not a run failure
         log.debug("progress callback failed at %s/%s", stage, status, exc_info=True)
+
+
+def _stage_span(stage: str, **fields: Any) -> Any:
+    """One span per pipeline stage; tracing off means a no-op context manager."""
+    return trace_span(f"stage.{stage}", fields)
 
 
 def _now() -> str:

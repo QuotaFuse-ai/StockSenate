@@ -29,6 +29,7 @@ NAV: tuple[tuple[str, str], ...] = (
     ("/backtest", "回测"),
     ("/alerts", "告警"),
     ("/queue", "队列"),
+    ("/reviews", "审批"),
     ("/settings", "设置"),
     ("/history", "历史"),
     ("/ops", "运维"),

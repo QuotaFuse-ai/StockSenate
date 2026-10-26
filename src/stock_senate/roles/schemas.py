@@ -104,12 +104,25 @@ class QualityDimension(StrictModel):
     note: str = ""
 
 
+class QualityDefect(StrictModel):
+    """One located flaw from the judge: what is wrong and where."""
+
+    dimension: str = ""
+    location: str = ""
+    issue: str = ""
+    fix_hint: str = ""
+
+
 class QualityVerdict(RoleOutput):
     score: float = Field(default=0.0, ge=0.0, le=100.0)
     low_quality: bool = False
     threshold: float = 70.0
     dimensions: dict[str, QualityDimension] = Field(default_factory=dict)
     notes: str = ""
+    # "rules" | "judge" | "hybrid": which gate produced this verdict.
+    mode: str = "rules"
+    defects: list[QualityDefect] = Field(default_factory=list)
+    compliance: dict[str, bool] = Field(default_factory=dict)
 
 
 SCHEMAS: dict[str, type[BaseModel]] = {
@@ -136,6 +149,7 @@ __all__ = [
     "Fact",
     "FinalDecision",
     "Horizon",
+    "QualityDefect",
     "QualityDimension",
     "QualityVerdict",
     "Rating",

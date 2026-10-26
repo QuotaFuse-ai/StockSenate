@@ -18,7 +18,7 @@ from starlette.testclient import TestClient
 
 from stock_senate.webui.auth import COOKIE_NAME, audit_log_path, recent_writes
 from stock_senate.webui.launch import create_app, is_loopback, run
-from stock_senate.webui.state import WebRuntime
+from stock_senate.webui.state import PendingReview, WebRuntime
 
 ROOT = Path(__file__).resolve().parents[1]
 PASSWORD = "unit-test-password"
@@ -31,6 +31,7 @@ PAGES = (
     "/backtest",
     "/alerts",
     "/queue",
+    "/reviews",
     "/settings",
     "/history",
     "/ops",
@@ -120,6 +121,12 @@ def test_writes_require_csrf_and_reject_bad_input(config_dir: Path, app_home: Pa
         assert (
             client.post("/queue/cancel", data={"job_id": "missing", "csrf": csrf}).status_code
             == 303
+        )
+        assert (
+            client.post(
+                "/reviews/decide", data={"review_id": "x", "decision": "approve"}
+            ).status_code
+            == 400
         )
         assert client.get("/reports/bad!id").status_code in {400, 404}
 
@@ -222,6 +229,144 @@ def test_offline_analysis_round_trip(
 
         # The run is visible on the history page too.
         assert run_id in client.get("/history").text
+
+
+def _start_hitl_job(client: TestClient, csrf: str) -> str:
+    response = client.post(
+        "/analysis",
+        data={"code": "600519", "date": "2026-10-24", "hitl": "1", "csrf": csrf},
+    )
+    assert response.status_code == 303
+    return response.headers["location"].split("/progress/")[1].split("?")[0]
+
+
+def _next_pending(runtime: WebRuntime, job_id: str, deadline: float) -> PendingReview | None:
+    while time.time() < deadline:
+        for review in runtime.reviews(limit=100):
+            if review.job_id == job_id and review.status == "pending":
+                return review
+        time.sleep(0.05)
+    return None
+
+
+def _wait_job(client: TestClient, job_id: str, deadline: float) -> dict:
+    snapshot: dict = {}
+    while time.time() < deadline:
+        snapshot = client.get(f"/api/progress/{job_id}").json()
+        if snapshot.get("status") in {"done", "failed"}:
+            break
+        time.sleep(0.1)
+    return snapshot
+
+
+def test_reviews_page_approves_and_releases_the_run(
+    config_dir: Path, app_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STOCKSENATE_LLM_PROVIDER", "offline")
+    monkeypatch.setenv("STOCKSENATE_DATA_MODE", "local")
+    runtime = WebRuntime(config_dir=config_dir)
+    app = create_app(runtime)
+
+    with TestClient(app, follow_redirects=False) as client:
+        client.get("/")
+        csrf = _csrf(runtime, client)
+        job_id = _start_hitl_job(client, csrf)
+
+        deadline = time.time() + 180
+        decisions = 0
+        while time.time() < deadline:
+            snapshot = client.get(f"/api/progress/{job_id}").json()
+            if snapshot.get("status") in {"done", "failed"}:
+                break
+            review = _next_pending(runtime, job_id, min(deadline, time.time() + 1))
+            if review is None:
+                continue
+            assert review.code == "600519"
+            assert review.payload["research"]["stance"]
+            assert review.payload["trade"]["direction"]
+            listing = client.get("/reviews")
+            assert listing.status_code == 200
+            assert f"待复核（{len(runtime.pending_reviews())}）" in listing.text
+            assert "600519" in listing.text
+            assert 'action="/reviews/decide"' in listing.text
+            assert 'value="reject"' in listing.text
+            response = client.post(
+                "/reviews/decide",
+                data={
+                    "review_id": review.review_id,
+                    "decision": "approve",
+                    "note": "测试同意",
+                    "csrf": csrf,
+                },
+            )
+            assert response.status_code == 303
+            decisions += 1
+
+        snapshot = _wait_job(client, job_id, deadline)
+        assert snapshot["status"] == "done", snapshot
+        assert snapshot["rating"]
+        assert decisions == 2
+        assert runtime.pending_reviews() == []
+        approved = [review for review in runtime.reviews() if review.status == "approved"]
+        assert {review.checkpoint for review in approved} == {"after_trader", "before_final"}
+        assert all(review.note == "测试同意" for review in approved)
+        actions = [row["action"] for row in recent_writes(runtime.home)]
+        assert actions.count("review.decide") == 2
+
+
+def test_reviews_rejection_blocks_the_final_rating(
+    config_dir: Path, app_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STOCKSENATE_LLM_PROVIDER", "offline")
+    monkeypatch.setenv("STOCKSENATE_DATA_MODE", "local")
+    runtime = WebRuntime(config_dir=config_dir)
+    app = create_app(runtime)
+
+    with TestClient(app, follow_redirects=False) as client:
+        client.get("/")
+        csrf = _csrf(runtime, client)
+        job_id = _start_hitl_job(client, csrf)
+
+        deadline = time.time() + 180
+        first_id: str | None = None
+        decisions = 0
+        while time.time() < deadline:
+            snapshot = client.get(f"/api/progress/{job_id}").json()
+            if snapshot.get("status") in {"done", "failed"}:
+                break
+            review = _next_pending(runtime, job_id, min(deadline, time.time() + 1))
+            if review is None:
+                continue
+            first_id = first_id or review.review_id
+            response = client.post(
+                "/reviews/decide",
+                data={
+                    "review_id": review.review_id,
+                    "decision": "reject",
+                    "note": "人工驳回",
+                    "csrf": csrf,
+                },
+            )
+            assert response.status_code == 303
+            decisions += 1
+
+        snapshot = _wait_job(client, job_id, deadline)
+        assert snapshot["status"] == "done", snapshot
+        assert snapshot["rating"] == "unknown"
+        assert decisions == 2
+        assert {review.status for review in runtime.reviews()} == {"rejected"}
+
+        missing = client.post(
+            "/reviews/decide",
+            data={"review_id": "missing", "decision": "approve", "csrf": csrf},
+        )
+        assert missing.status_code == 404
+        assert first_id is not None
+        repeat = client.post(
+            "/reviews/decide",
+            data={"review_id": first_id, "decision": "approve", "csrf": csrf},
+        )
+        assert repeat.status_code == 409
 
 
 def test_non_loopback_bind_requires_a_password(

@@ -33,6 +33,8 @@ _FORM = """
     <div><label for="weight">权重（如 bull=0.6, bear=0.4）</label>
       <input id="weight" type="text" name="weight" placeholder="bull=0.6"></div>
   </div>
+  <p class="muted">勾选 HITL 后，分析会在检查点暂停并等待处理，
+     请到 <a href="/reviews">审批</a> 页同意或驳回；超时按配置自动放行并在报告中留痕。</p>
   <p class="muted" style="margin-bottom:0">输出只含研究结论与风险提示，
      不含可执行价位或交易指令。</p>
 </form>

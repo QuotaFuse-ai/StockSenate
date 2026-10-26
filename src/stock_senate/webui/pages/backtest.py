@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, Response
@@ -43,16 +46,21 @@ def _form(request: Request, values: dict[str, str]) -> Html:
 
 def _result(payload: dict) -> Html:
     metrics = payload.get("metrics") or {}
-    metric_rows = [[esc(key), esc(_fmt(value))] for key, value in metrics.items()]
+    metric_rows = [
+        [esc(key), esc(_fmt(value))]
+        for key, value in metrics.items()
+        if not isinstance(value, Mapping)
+    ]
     per_code = []
     for code, summary in (payload.get("per_code") or {}).items():
         per_code.append(
             [
                 esc(code),
-                esc(_fmt(summary.get("total_return"))),
+                esc(_fmt(summary.get("total_return_pct"))),
+                esc(_fmt(summary.get("alpha_pct"))),
                 esc(_fmt(summary.get("win_rate"))),
                 esc(summary.get("trades", "—")),
-                esc(_fmt(summary.get("max_drawdown"))),
+                esc(_fmt(summary.get("max_drawdown_pct"))),
             ]
         )
     head = (
@@ -72,13 +80,66 @@ def _result(payload: dict) -> Html:
         + missing_html
         + "<h2>总体指标</h2>"
         + str(table(["指标", "值"], metric_rows, empty="没有指标"))
+        + "<h2>alpha 分桶（按信号置信度）</h2>"
+        + str(
+            table(
+                ["置信度", "交易数", "平均 alpha %", "跑赢持有比例 %"],
+                _bucket_rows(metrics.get("alpha_buckets")),
+                empty="没有成交",
+            )
+        )
+        + "<h2>signal decay（组合）</h2>"
+        + str(
+            table(
+                ["持有交易日", "买入后均值 %", "卖出后均值 %", "decay %", "样本"],
+                _decay_rows(metrics.get("signal_decay")),
+                empty="没有信号",
+            )
+        )
         + "<h2>分标的</h2>"
-        + str(table(["代码", "收益", "胜率", "交易数", "最大回撤"], per_code, empty="没有结果"))
+        + str(
+            table(
+                ["代码", "收益 %", "alpha %", "胜率", "交易数", "最大回撤 %"],
+                per_code,
+                empty="没有结果",
+            )
+        )
         + "<h2>产物</h2>"
         + str(table(["项", "路径"], [[esc(key), esc(value)] for key, value in artifacts.items()]))
         + '<p class="muted">回测结果保存在状态目录的 <code>backtests/</code> 下，'
         + "可用 sqlite 复查。</p>"
     )
+
+
+def _bucket_rows(buckets: Any) -> list[list[str]]:
+    if not isinstance(buckets, Mapping):
+        return []
+    return [
+        [
+            esc(name),
+            esc(bucket.get("trades", "—")),
+            esc(_fmt(bucket.get("mean_alpha_pct"))),
+            esc(_fmt(bucket.get("hit_rate"))),
+        ]
+        for name, bucket in buckets.items()
+        if isinstance(bucket, Mapping)
+    ]
+
+
+def _decay_rows(curve: Any) -> list[list[str]]:
+    if not isinstance(curve, Mapping):
+        return []
+    return [
+        [
+            esc(name),
+            esc(_fmt(row.get("buy_pct"))),
+            esc(_fmt(row.get("sell_pct"))),
+            esc(_fmt(row.get("decay_pct"))),
+            esc(row.get("samples", "—")),
+        ]
+        for name, row in curve.items()
+        if isinstance(row, Mapping)
+    ]
 
 
 def _fmt(value: object) -> str:

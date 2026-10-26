@@ -53,16 +53,44 @@ invalidate_on = ["announcement", "risk_event"]
 [quality_gate]
 enabled = true
 threshold = 70
+# 评分方式：rules 确定性规则（默认，不调用模型）/ judge 评审模型独立打分 /
+# hybrid 两者加权。judge 与 hybrid 在模型不可用或 offline 时自动回退 rules。
+mode = "rules"
+# hybrid 模式下评审分的权重（0~1）。
+judge_weight = 0.5
 # 低于阈值不阻断交付，但决策标记为 low_quality 并要求人工复核。
 block_on_fail = false
 dimensions = ["logic_coherence", "evidence_sufficiency", "citation_accuracy"]
 
 [compression]
-# Map-Reduce 上下文压缩；超过阈值时按证据单元切块。
+# 上下文压缩；超过阈值时按证据单元切块，引用与来源字段保留。
 enabled = true
 trigger_tokens = 24000
 chunk_tokens = 6000
 keep_citations = true
+
+[memory]
+# 长期反思库：每次跑完后追加一条，下一次同标的分析注入最近若干条。
+# 路径相对 state 根目录；只保存研究结论，不保存可执行价位或交易指令。
+enabled = true
+path = "memory/reflections.jsonl"
+max_entries = 6
+
+[tracing]
+# 追踪默认关闭。开启后每个流水线阶段和每次模型调用都会生成 span，
+# 并沿用同一次运行的 trace_id，便于与日志对齐。
+# exporter：none / jsonl（本地文件，无额外依赖）/ otlp（OTLP/HTTP，
+# 兼容 OpenTelemetry Collector 与 Langfuse 的 OTLP 接入点）。
+enabled = false
+exporter = "jsonl"
+# 相对路径按 state 根目录解析。
+path = "~/.stock_senate/traces/spans.jsonl"
+# otlp 专用；Langfuse 示例：https://cloud.langfuse.com/api/public/otel
+endpoint = ""
+service_name = "stocksenate"
+# 认证头从环境变量读取（key=value,key=value），配置里只记录变量名。
+headers_env = "STOCKSENATE_OTEL_HEADERS"
+timeout_seconds = 5
 
 [budget]
 # 单次分析的调用与时长上限，命中即熔断（见 budget.toml）。

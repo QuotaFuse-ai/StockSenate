@@ -63,6 +63,8 @@ DATA_MODES = {"stockdata", "local", "hybrid", "priority"}
 ALERT_LEVELS = {"high", "mid", "low"}
 ON_EXCEED = {"stop", "fail"}
 HITL_CHECKPOINTS = {"after_trader", "before_final"}
+QUALITY_GATE_MODES = ("rules", "judge", "hybrid")
+TRACE_EXPORTERS = ("none", "jsonl", "otlp")
 
 _ANY = "*"
 
@@ -139,12 +141,28 @@ _KNOWN_KEYS: dict[str, dict[str, Any]] = {
             "threshold": None,
             "block_on_fail": None,
             "dimensions": None,
+            "mode": None,
+            "judge_weight": None,
         },
         "compression": {
             "enabled": None,
             "trigger_tokens": None,
             "chunk_tokens": None,
             "keep_citations": None,
+        },
+        "memory": {
+            "enabled": None,
+            "path": None,
+            "max_entries": None,
+        },
+        "tracing": {
+            "enabled": None,
+            "exporter": None,
+            "path": None,
+            "endpoint": None,
+            "service_name": None,
+            "headers_env": None,
+            "timeout_seconds": None,
         },
         "budget": {"max_llm_calls": None, "max_total_tokens": None, "max_wall_clock_seconds": None},
         "queue": {
@@ -587,6 +605,65 @@ def _check_workflow(data: dict[str, Any], errors: list[dict[str, str]]) -> None:
     threshold = gate.get("threshold", 70)
     if not isinstance(threshold, (int, float)) or not 0 <= threshold <= 100:
         _error(errors, "workflow.toml", "quality_gate.threshold", "必须在 0~100 之间")
+
+    mode = gate.get("mode", "rules")
+    if mode not in QUALITY_GATE_MODES:
+        _error(errors, "workflow.toml", "quality_gate.mode", "必须是 rules、judge 或 hybrid")
+    weight = gate.get("judge_weight", 0.5)
+    if not isinstance(weight, (int, float)) or isinstance(weight, bool) or not 0 <= weight <= 1:
+        _error(errors, "workflow.toml", "quality_gate.judge_weight", "必须在 0~1 之间")
+
+    compression = data.get("compression", {})
+    for key in ("enabled", "keep_citations"):
+        value = compression.get(key, True)
+        if not isinstance(value, bool):
+            _error(errors, "workflow.toml", f"compression.{key}", "必须是布尔值")
+    trigger = compression.get("trigger_tokens", 24000)
+    chunk = compression.get("chunk_tokens", 6000)
+    for key, value in (("trigger_tokens", trigger), ("chunk_tokens", chunk)):
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            _error(errors, "workflow.toml", f"compression.{key}", "必须是 > 0 的整数")
+    if (
+        isinstance(trigger, int)
+        and isinstance(chunk, int)
+        and not isinstance(trigger, bool)
+        and not isinstance(chunk, bool)
+        and chunk > 0
+        and trigger <= chunk
+    ):
+        _error(
+            errors,
+            "workflow.toml",
+            "compression.trigger_tokens",
+            "必须大于 compression.chunk_tokens，否则单块就超阈值",
+        )
+
+    memory = data.get("memory", {})
+    if not isinstance(memory.get("enabled", True), bool):
+        _error(errors, "workflow.toml", "memory.enabled", "必须是布尔值")
+    if not str(memory.get("path") or "memory/reflections.jsonl").strip():
+        _error(errors, "workflow.toml", "memory.path", "不能为空")
+    entries = memory.get("max_entries", 6)
+    if not isinstance(entries, int) or isinstance(entries, bool) or entries < 0:
+        _error(errors, "workflow.toml", "memory.max_entries", "必须是 >= 0 的整数")
+
+    tracing_cfg = data.get("tracing", {})
+    if not isinstance(tracing_cfg.get("enabled", False), bool):
+        _error(errors, "workflow.toml", "tracing.enabled", "必须是布尔值")
+    exporter = str(tracing_cfg.get("exporter") or "none").strip().lower()
+    if exporter not in TRACE_EXPORTERS:
+        _error(errors, "workflow.toml", "tracing.exporter", "可选 none / jsonl / otlp")
+    if exporter == "jsonl" and not str(tracing_cfg.get("path") or "").strip():
+        _error(errors, "workflow.toml", "tracing.path", "jsonl 导出器必须配置路径")
+    if (
+        exporter == "otlp"
+        and tracing_cfg.get("enabled") is True
+        and not str(tracing_cfg.get("endpoint") or "").strip()
+    ):
+        _error(errors, "workflow.toml", "tracing.endpoint", "otlp 导出器必须配置 endpoint")
+    timeout = tracing_cfg.get("timeout_seconds", 5)
+    if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+        _error(errors, "workflow.toml", "tracing.timeout_seconds", "必须是 > 0 的数值")
 
     queue = data.get("queue", {})
     attempts = queue.get("max_attempts", 3)

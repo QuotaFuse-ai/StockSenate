@@ -15,6 +15,12 @@ Execution model (documented in the delivery note):
   early, so windows never overlap;
 * A-share ±10% price-limit days block the fill instead of assuming a price;
 * size is a whole number of 100-share lots and the fee is charged per side.
+
+Attribution follows the same rule: alpha is measured per round trip against
+holding the code over the identical entry→exit dates, so a bucket answers "did
+conviction pay for itself" rather than restating the market's move. Signal decay
+is sampled at several holding horizons per code and rolled up across the
+portfolio so a single noisy name cannot define the whole picture.
 """
 
 from __future__ import annotations
@@ -45,6 +51,7 @@ _LOT = 100
 _WARMUP = 20
 _BUY_RATINGS = {"buy", "overweight"}
 _SELL_RATINGS = {"sell", "underweight"}
+_CONFIDENCE_BANDS = (("low", 0.0, 0.55), ("mid", 0.55, 0.70), ("high", 0.70, math.inf))
 
 
 # --------------------------------------------------------------------------- #
@@ -105,7 +112,9 @@ def run(
         )
 
     missing = [code for code in targets if not bars_by_code.get(code)]
-    metrics = _metrics(sims, capital=float(capital), start=start_day, end=end_day)
+    metrics = _metrics(
+        sims, capital=float(capital), start=start_day, end=end_day, window=int(window)
+    )
     result: dict[str, Any] = {
         "mode": "backtest",
         "simulation": True,
@@ -265,7 +274,9 @@ def _simulate(
     entry: dict[str, Any] | None = None
     pending: str | None = None
     pending_reason = "window_end"
+    pending_confidence = 0.0
     trades: list[Trade] = []
+    trade_confidences: list[float] = []
     decisions: list[dict[str, Any]] = []
     positions: list[dict[str, Any]] = []
     curve: list[tuple[str, float]] = []
@@ -299,6 +310,7 @@ def _simulate(
                         "shares": bought,
                         "fee": entry_fee,
                         "reason": "signal",
+                        "confidence": pending_confidence,
                     }
                 pending = None
 
@@ -310,6 +322,7 @@ def _simulate(
                 trades.append(
                     _close(code, entry, bar.date, price, shares, fee, reason=pending_reason)
                 )
+                trade_confidences.append(float(entry.get("confidence") or 0.0))
                 cash += price * shares - price * shares * fee
                 shares = 0
                 entry = None
@@ -336,6 +349,7 @@ def _simulate(
                 decisions.append(signal)
                 if signal["signal"] > 0 and not shares and pending is None and index < last_index:
                     pending = "buy"
+                    pending_confidence = float(signal.get("confidence") or 0.0)
                 elif signal["signal"] < 0 and shares and pending is None:
                     pending = "sell"
                     pending_reason = "bearish_signal"
@@ -354,15 +368,18 @@ def _simulate(
         last = bars[-1]
         price = last.close
         trades.append(_close(code, entry, last.date, price, shares, fee, reason="end_of_data"))
+        trade_confidences.append(float(entry.get("confidence") or 0.0))
         cash += price * shares - price * shares * fee
         shares = 0
         entry = None
         curve[-1] = (last.date, cash)
 
+    horizons = _decay_horizons(window)
+    decay_samples = _decay_samples(decisions, bars, horizons)
+    alpha_samples = _alpha_samples(trades, trade_confidences, bars)
     summary = _code_summary(
         code,
         bars[start_index:],
-        decisions,
         trades,
         curve,
         capital=capital,
@@ -372,6 +389,9 @@ def _simulate(
         limit_up_skips=limit_up_skips,
         limit_down_defers=limit_down_defers,
         window=window,
+        horizons=horizons,
+        decay_samples=decay_samples,
+        alpha_samples=alpha_samples,
     )
     return {
         "decisions": decisions,
@@ -379,6 +399,8 @@ def _simulate(
         "positions": positions,
         "prices": prices,
         "curve": curve,
+        "decay_samples": decay_samples,
+        "alpha_samples": alpha_samples,
         "summary": summary,
     }
 
@@ -473,6 +495,8 @@ def _empty_sim(code: str, capital: float, *, reason: str = "行情数据缺失")
         "positions": [],
         "prices": [],
         "curve": [],
+        "decay_samples": [],
+        "alpha_samples": [],
         "summary": {
             "code": code,
             "status": "missing",
@@ -489,6 +513,8 @@ def _empty_sim(code: str, capital: float, *, reason: str = "行情数据缺失")
             "exposure_pct": 0.0,
             "limit_up_skips": 0,
             "limit_down_defers": 0,
+            "alpha_buckets": _alpha_buckets([]),
+            "signal_decay": {},
             "no_lookahead": True,
         },
     }
@@ -502,7 +528,6 @@ def _empty_sim(code: str, capital: float, *, reason: str = "行情数据缺失")
 def _code_summary(
     code: str,
     window_bars: list[Bar],
-    decisions: list[dict[str, Any]],
     trades: list[Trade],
     curve: list[tuple[str, float]],
     *,
@@ -513,17 +538,21 @@ def _code_summary(
     limit_up_skips: int,
     limit_down_defers: int,
     window: int,
+    horizons: list[int],
+    decay_samples: list[tuple[int, int, float]],
+    alpha_samples: list[tuple[float, float]],
 ) -> dict[str, Any]:
     benchmark = _benchmark(window_bars)
     total_return = (final_equity - capital) / capital * 100 if capital else 0.0
     wins = [trade for trade in trades if trade.pnl > 0]
     profits = sum(trade.pnl for trade in trades if trade.pnl > 0)
     losses = -sum(trade.pnl for trade in trades if trade.pnl < 0)
-    forward = _forward_returns(decisions, window_bars, window)
-    buy_returns = [ret for ret, signal in forward if signal > 0]
-    sell_returns = [ret for ret, signal in forward if signal < 0]
-    correct = [ret for ret, signal in forward if signal > 0 and ret > 0]
-    bearish = [ret for ret, signal in forward if signal < 0 and ret < 0]
+    decay = _signal_decay(decay_samples, horizons)
+    window_forward = [(signal, ret) for horizon, signal, ret in decay_samples if horizon == window]
+    buy_returns = [ret for signal, ret in window_forward if signal > 0]
+    sell_returns = [ret for signal, ret in window_forward if signal < 0]
+    correct = [ret for signal, ret in window_forward if signal > 0 and ret > 0]
+    bearish = [ret for signal, ret in window_forward if signal < 0 and ret < 0]
     directional = len(buy_returns) + len(sell_returns)
     return {
         "code": code,
@@ -549,12 +578,9 @@ def _code_summary(
         "sell_forward_return_pct": _round(sum(sell_returns) / len(sell_returns))
         if sell_returns
         else None,
-        "signal_decay_pct": _round(
-            (sum(buy_returns) / len(buy_returns) if buy_returns else 0.0)
-            - (sum(sell_returns) / len(sell_returns) if sell_returns else 0.0)
-        )
-        if buy_returns or sell_returns
-        else None,
+        "signal_decay_pct": decay.get(str(window), {}).get("decay_pct"),
+        "signal_decay": decay,
+        "alpha_buckets": _alpha_buckets(alpha_samples),
         "avg_hold_days": _round(
             sum(_hold_days(trade, window_bars) for trade in trades) / len(trades)
         )
@@ -578,6 +604,7 @@ def _metrics(
     capital: float,
     start: str,
     end: str,
+    window: int,
 ) -> dict[str, Any]:
     final_equity = sum(float(sim["summary"]["final_equity"]) for sim in sims.values())
     total_return = (final_equity - capital) / capital * 100 if capital else 0.0
@@ -596,6 +623,8 @@ def _metrics(
         for sim in sims.values()
         if sim["summary"].get("direction_accuracy") is not None
     ]
+    decay_samples = [sample for sim in sims.values() for sample in sim.get("decay_samples") or []]
+    alpha_samples = [sample for sim in sims.values() for sample in sim.get("alpha_samples") or []]
     return {
         "start": start,
         "end": end,
@@ -615,6 +644,8 @@ def _metrics(
         else None,
         "profit_factor": _round(profits / losses) if losses else None,
         "direction_accuracy": _round(sum(accuracies) / len(accuracies)) if accuracies else None,
+        "alpha_buckets": _alpha_buckets(alpha_samples),
+        "signal_decay": _signal_decay(decay_samples, _decay_horizons(window)),
         "expectancy_pct": _round(sum(trade["return_pct"] for trade in trades) / len(trades))
         if trades
         else None,
@@ -632,23 +663,98 @@ def _benchmark(bars: list[Bar]) -> float | None:
     return (bars[-1].close / bars[0].close - 1) * 100
 
 
-def _forward_returns(
-    decisions: list[dict[str, Any]], bars: list[Bar], window: int
-) -> list[tuple[float, int]]:
+def _decay_horizons(window: int) -> list[int]:
+    """Horizons a decay curve is sampled at: one step, half, the hold, and twice it."""
+    return sorted({1, max(1, window // 2), window, window * 2})
+
+
+def _decay_samples(
+    decisions: list[dict[str, Any]], bars: list[Bar], horizons: Iterable[int]
+) -> list[tuple[int, int, float]]:
+    """``(horizon, signal, forward_return_pct)`` per directional decision."""
     by_date = {bar.date: index for index, bar in enumerate(bars)}
-    returns: list[tuple[float, int]] = []
+    samples: list[tuple[int, int, float]] = []
     for decision in decisions:
         signal = int(decision.get("signal") or 0)
         if not signal:
             continue
         index = by_date.get(str(decision.get("date")))
-        if index is None or index + window >= len(bars):
+        if index is None:
             continue
         base = bars[index].close
-        future = bars[index + window].close
-        if base:
-            returns.append(((future / base - 1) * 100, signal))
-    return returns
+        if not base:
+            continue
+        for horizon in horizons:
+            if index + horizon >= len(bars):
+                continue
+            samples.append((horizon, signal, (bars[index + horizon].close / base - 1) * 100))
+    return samples
+
+
+def _signal_decay(
+    samples: Iterable[tuple[int, int, float]], horizons: Iterable[int]
+) -> dict[str, dict[str, Any]]:
+    """Mean forward return per side and the buy-minus-sell spread, per horizon."""
+    grouped: dict[int, dict[int, list[float]]] = {horizon: {1: [], -1: []} for horizon in horizons}
+    for horizon, signal, value in samples:
+        if horizon in grouped and signal in grouped[horizon]:
+            grouped[horizon][signal].append(value)
+    decay: dict[str, dict[str, Any]] = {}
+    for horizon in sorted(grouped):
+        buy = grouped[horizon][1]
+        sell = grouped[horizon][-1]
+        buy_mean = sum(buy) / len(buy) if buy else None
+        sell_mean = sum(sell) / len(sell) if sell else None
+        decay[str(horizon)] = {
+            "buy_pct": _round(buy_mean),
+            "sell_pct": _round(sell_mean),
+            "decay_pct": _round(buy_mean - sell_mean)
+            if buy_mean is not None and sell_mean is not None
+            else None,
+            "samples": len(buy) + len(sell),
+        }
+    return decay
+
+
+def _alpha_samples(
+    trades: Iterable[Trade], confidences: Iterable[float], bars: list[Bar]
+) -> list[tuple[float, float]]:
+    """``(entry_confidence, alpha_pct)`` per round trip versus holding the same dates."""
+    by_date = {bar.date: bar for bar in bars}
+    samples: list[tuple[float, float]] = []
+    for trade, confidence in zip(trades, confidences, strict=True):
+        entry = by_date.get(trade.entry_date)
+        exit_bar = by_date.get(trade.exit_date)
+        if entry is None or exit_bar is None or not entry.close:
+            continue
+        benchmark = (exit_bar.close / entry.close - 1) * 100
+        samples.append((float(confidence), trade.return_pct - benchmark))
+    return samples
+
+
+def _alpha_buckets(samples: Iterable[tuple[float, float]]) -> dict[str, dict[str, Any]]:
+    """Round-trip alpha grouped into fixed confidence bands."""
+    grouped: dict[str, list[float]] = {name: [] for name, _, _ in _CONFIDENCE_BANDS}
+    for confidence, alpha in samples:
+        grouped[_confidence_band(confidence)].append(alpha)
+    return {
+        name: {
+            "trades": len(values),
+            "mean_alpha_pct": _round(sum(values) / len(values)) if values else None,
+            "hit_rate": _round(sum(1 for value in values if value > 0) / len(values) * 100)
+            if values
+            else None,
+        }
+        for name, values in grouped.items()
+    }
+
+
+def _confidence_band(confidence: float) -> str:
+    value = min(max(float(confidence), 0.0), 1.0)
+    for name, lower, upper in _CONFIDENCE_BANDS:
+        if lower <= value < upper:
+            return name
+    return _CONFIDENCE_BANDS[-1][0]
 
 
 def _hold_days(trade: Trade, bars: list[Bar]) -> int:

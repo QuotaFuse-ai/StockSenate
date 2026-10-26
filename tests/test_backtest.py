@@ -60,11 +60,12 @@ def _write_archive(
     rows: list[dict[str, object]],
     archive_day: str,
     data_as_of: str | None = None,
+    code: str = CODE,
 ) -> Path:
-    directory = root / "kline" / CODE
+    directory = root / "kline" / code
     directory.mkdir(parents=True, exist_ok=True)
     document: dict[str, object] = {
-        "data": {"code": CODE, "period": "daily", "klines": rows},
+        "data": {"code": code, "period": "daily", "klines": rows},
         "data_as_of": data_as_of or archive_day,
     }
     path = directory / f"{archive_day}.json"
@@ -250,3 +251,96 @@ def test_report_and_replay_share_one_result(tmp_path: Path, archive: Path) -> No
     assert stored["metrics"] == result["metrics"]
     assert stored["trades"] == result["trades"]
     assert stored["disclaimer"] == result["disclaimer"]
+
+
+# --------------------------------------------------------------------------- #
+# alpha attribution / portfolio signal decay
+# --------------------------------------------------------------------------- #
+
+
+def test_alpha_is_bucketed_by_signal_confidence(tmp_path: Path, archive: Path) -> None:
+    result = _replay(tmp_path)
+    summary = result["per_code"][CODE]
+    buckets = summary["alpha_buckets"]
+
+    assert list(buckets) == ["low", "mid", "high"]
+    assert sum(bucket["trades"] for bucket in buckets.values()) == summary["trades"]
+    assert summary["trades"] > 0
+    populated = {name for name, bucket in buckets.items() if bucket["trades"]}
+    assert populated
+    for name in populated:
+        assert buckets[name]["mean_alpha_pct"] is not None
+        assert 0.0 <= buckets[name]["hit_rate"] <= 100.0
+    for bucket in buckets.values():
+        if not bucket["trades"]:
+            assert bucket["mean_alpha_pct"] is None
+            assert bucket["hit_rate"] is None
+    # A single code makes the portfolio rollup identical to that code's buckets.
+    assert result["metrics"]["alpha_buckets"] == buckets
+
+
+def test_bucket_and_decay_helpers_pin_the_band_edges() -> None:
+    buckets = engine._alpha_buckets([(0.4, 1.0), (0.4, -3.0), (0.55, 2.0), (0.7, 4.0)])
+
+    assert buckets["low"] == {"trades": 2, "mean_alpha_pct": -1.0, "hit_rate": 50.0}
+    assert buckets["mid"] == {"trades": 1, "mean_alpha_pct": 2.0, "hit_rate": 100.0}
+    assert buckets["high"] == {"trades": 1, "mean_alpha_pct": 4.0, "hit_rate": 100.0}
+    assert engine._alpha_buckets([]) == {
+        "low": {"trades": 0, "mean_alpha_pct": None, "hit_rate": None},
+        "mid": {"trades": 0, "mean_alpha_pct": None, "hit_rate": None},
+        "high": {"trades": 0, "mean_alpha_pct": None, "hit_rate": None},
+    }
+    assert engine._decay_horizons(5) == [1, 2, 5, 10]
+    assert engine._decay_horizons(1) == [1, 2]
+
+
+def test_signal_decay_covers_horizons_and_rolls_up(tmp_path: Path, archive: Path) -> None:
+    result = _replay(tmp_path)
+    summary = result["per_code"][CODE]
+    curve = summary["signal_decay"]
+
+    assert list(curve) == ["1", "2", "5", "10"]
+    assert curve["5"]["decay_pct"] == summary["signal_decay_pct"]
+    assert curve["5"]["samples"] > 0
+    for row in curve.values():
+        if row["buy_pct"] is not None and row["sell_pct"] is not None:
+            # Each component is rounded independently, so allow the last digit.
+            assert row["decay_pct"] == pytest.approx(row["buy_pct"] - row["sell_pct"], abs=1e-3)
+        else:
+            assert row["decay_pct"] is None
+    assert result["metrics"]["signal_decay"] == curve
+
+
+def test_portfolio_decay_aggregates_every_code(tmp_path: Path) -> None:
+    root = tmp_path / "local"
+    other = "000001"
+    _write_archive(root, rows=_bars(), archive_day=_days()[-1])
+    _write_archive(root, rows=_bars(), archive_day=_days()[-1], code=other)
+
+    result = _replay(tmp_path, codes=[CODE, other])
+
+    single = result["per_code"][CODE]["signal_decay"]
+    portfolio = result["metrics"]["signal_decay"]
+    for horizon, row in single.items():
+        assert portfolio[horizon]["samples"] == row["samples"] * 2
+        assert portfolio[horizon]["buy_pct"] == row["buy_pct"]
+        assert portfolio[horizon]["decay_pct"] == row["decay_pct"]
+    assert result["metrics"]["trade_count"] == result["per_code"][CODE]["trades"] * 2
+    assert (
+        result["metrics"]["alpha_buckets"]["high"]["trades"]
+        == result["per_code"][CODE]["alpha_buckets"]["high"]["trades"] * 2
+    )
+
+
+def test_missing_code_has_no_buckets_or_decay(tmp_path: Path, archive: Path) -> None:
+    result = _replay(tmp_path, codes=[CODE, "000001"])
+    missing = result["per_code"]["000001"]
+
+    assert missing["signal_decay"] == {}
+    assert missing["alpha_buckets"] == {
+        "low": {"trades": 0, "mean_alpha_pct": None, "hit_rate": None},
+        "mid": {"trades": 0, "mean_alpha_pct": None, "hit_rate": None},
+        "high": {"trades": 0, "mean_alpha_pct": None, "hit_rate": None},
+    }
+    assert result["metrics"]["alpha_buckets"] == result["per_code"][CODE]["alpha_buckets"]
+    assert len(result["metrics"]["signal_decay"]) == len(result["per_code"][CODE]["signal_decay"])
