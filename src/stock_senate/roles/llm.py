@@ -21,8 +21,10 @@ from typing import Any
 
 from stock_senate.config.schema import ROLE_ALIASES, ROLE_LLM_KEYS
 from stock_senate.observability.logging import get_logger
+from stock_senate.observability.tracing import span as trace_span
 from stock_senate.workflow import offline
 from stock_senate.workflow.budget import Budget
+from stock_senate.workflow.compress import compress_context, settings_from_config
 
 
 class LLMUnavailable(RuntimeError):
@@ -71,6 +73,14 @@ class ModelTarget:
     role: str
     provider: str
     model: str
+
+
+def _call_span(target: ModelTarget, schema_name: str) -> Any:
+    """One span per role model call; the target names which model answered."""
+    return trace_span(
+        f"llm.{schema_name}",
+        {"role": target.role, "provider": target.provider, "model": target.model},
+    )
 
 
 def _json_object(text: str) -> dict[str, Any]:
@@ -253,6 +263,7 @@ class RoleLLMResolver:
         self.validation_retries = max(0, int(structured.get("max_local_retries", 2)))
         self.json_mode = structured.get("enabled", True) is not False
         self.fallback_chain = list((llm_section.get("fallback") or {}).get("chain") or [])
+        self.compression = settings_from_config(config)
         self.budget = budget
         self._clients: dict[tuple[str, str], Any] = {}
         self.calls: list[dict[str, Any]] = []
@@ -334,49 +345,62 @@ class RoleLLMResolver:
         context: Mapping[str, Any],
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         target = self.target(role)
-        if target.provider.lower() == "offline":
-            payload = offline.generate(schema_name, context)
-            self.calls.append({"role": target.role, "provider": "offline", "model": target.model})
-            return payload, {
-                "provider": "offline",
-                "model": target.model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-            }
+        with _call_span(target, schema_name) as current:
+            if target.provider.lower() == "offline":
+                payload = offline.generate(schema_name, context)
+                self.calls.append(
+                    {"role": target.role, "provider": "offline", "model": target.model}
+                )
+                return payload, {
+                    "provider": "offline",
+                    "model": target.model,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                }
 
-        client = self.client(target)
-        user = self._user_prompt(schema_name, context)
-        last_error: Exception | None = None
-        for attempt in range(self.validation_retries + 1):
-            text, tokens = self._invoke(client, system=system, user=user)
-            if self.budget is not None:
-                self.budget.charge(**tokens)
-            self.calls.append(
-                {
-                    "role": target.role,
-                    "provider": target.provider,
-                    "model": target.model,
-                    **tokens,
-                }
+            client = self.client(target)
+            user, compression = self._prompt(schema_name, context)
+            current.set_attributes(
+                {"compression": bool(compression.get("triggered")), "local_retries": 0}
             )
-            try:
-                return _json_object(text), {
-                    "provider": target.provider,
-                    "model": target.model,
-                    **tokens,
-                }
-            except LLMResponseInvalid as exc:
-                last_error = exc
-                get_logger("llm").warning(
-                    "structured output invalid; retrying locally",
-                    extra={"event": "schema_retry", "role": target.role, "attempt": attempt + 1},
+            last_error: Exception | None = None
+            for attempt in range(self.validation_retries + 1):
+                text, tokens = self._invoke(client, system=system, user=user)
+                if self.budget is not None:
+                    self.budget.charge(**tokens)
+                self.calls.append(
+                    {
+                        "role": target.role,
+                        "provider": target.provider,
+                        "model": target.model,
+                        **tokens,
+                        "compression": compression,
+                    }
                 )
-                user = (
-                    user
-                    + f"\n\n上一次输出无法解析（{exc}）。只返回一个符合 "
-                    + f"{schema_name} 的 JSON 对象，不要解释。"
-                )
-        raise LLMUnavailable(f"{target.role} 结构化输出校验失败：{last_error}")
+                current.set_attributes({**tokens, "local_retries": attempt})
+                try:
+                    return _json_object(text), {
+                        "provider": target.provider,
+                        "model": target.model,
+                        **tokens,
+                        "compression": compression,
+                    }
+                except LLMResponseInvalid as exc:
+                    last_error = exc
+                    get_logger("llm").warning(
+                        "structured output invalid; retrying locally",
+                        extra={
+                            "event": "schema_retry",
+                            "role": target.role,
+                            "attempt": attempt + 1,
+                        },
+                    )
+                    user = (
+                        user
+                        + f"\n\n上一次输出无法解析（{exc}）。只返回一个符合 "
+                        + f"{schema_name} 的 JSON 对象，不要解释。"
+                    )
+            raise LLMUnavailable(f"{target.role} 结构化输出校验失败：{last_error}")
 
     def _invoke(self, client: Any, *, system: str, user: str) -> tuple[str, dict[str, int]]:
         attempt = 0
@@ -396,16 +420,24 @@ class RoleLLMResolver:
                     raise
                 time.sleep(min(self.retry_delay, 5.0))
 
-    def _user_prompt(self, schema_name: str, context: Mapping[str, Any]) -> str:
-        compressed = _truncate(context)
-        blob = json.dumps(compressed, ensure_ascii=False, default=str)
-        return (
+    def _prompt(self, schema_name: str, context: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
+        compressed, record = compress_context(context, self.compression)
+        # Below the trigger the historical truncation still applies; once
+        # compression ran it already bounded strings and lists and its
+        # citation-preserving shape must not be flattened again.
+        payload = compressed if record.triggered else _truncate(compressed)
+        blob = json.dumps(payload, ensure_ascii=False, default=str)
+        prompt = (
             f"请输出一个符合 {schema_name} 的 JSON 对象。\n"
             "硬性约束：不给出任何可执行价格、价位、仓位比例或订单字段；"
             "数据缺失只能写入 data_gaps，禁止补数或猜测数值；"
             "所有数值必须能在输入数据中找到。\n"
             f"输入数据：\n{blob}"
         )
+        return prompt, record.as_dict()
+
+    def _user_prompt(self, schema_name: str, context: Mapping[str, Any]) -> str:
+        return self._prompt(schema_name, context)[0]
 
 
 __all__ = [

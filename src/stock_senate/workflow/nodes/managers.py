@@ -76,6 +76,7 @@ def run_research_manager(
         "rounds_used": debate.rounds_used if debate else 0,
         "convergence_reason": debate.convergence_reason if debate else "",
         "debate": debate.as_dict() if debate else {},
+        "memory": ctx.memory,
     }
     if debate:
         by_side = debate.by_side
@@ -126,6 +127,7 @@ def run_portfolio_manager(
         "risks": [argument.model_dump() for argument in risks],
         "digest": ctx.digest,
         "hitl": hitl_payload,
+        "memory": ctx.memory,
     }
     model = run_role(ctx, "portfolio_manager", context)
     if not isinstance(model, FinalDecision):

@@ -27,6 +27,7 @@ def analyst_context(ctx: RunContext, spec: Any, domains: list[str]) -> dict[str,
         "digest": ctx.digest,
         "weights": ctx.weights,
         "as_of": ctx.date,
+        "memory": ctx.memory,
     }
 
 

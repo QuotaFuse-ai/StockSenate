@@ -9,6 +9,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+import pytest
+
 from stock_senate.config import schema
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +30,64 @@ def append_to(path: Path, text: str) -> None:
 def test_repository_config_is_valid() -> None:
     report = schema.validate_dir(CONFIG)
     assert report["ok"] is True, report["errors"]
+
+
+def test_hitl_timeout_must_be_positive(tmp_path: Path) -> None:
+    directory = copy_config(tmp_path)
+    path = directory / "workflow.toml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "timeout_seconds = 1800", "timeout_seconds = 0", 1
+        ),
+        encoding="utf-8",
+    )
+    report = schema.validate_dir(directory)
+    assert report["ok"] is False
+    assert any(error["key"] == "hitl.timeout_seconds" for error in report["errors"])
+
+
+def test_tracing_timeout_must_be_positive(tmp_path: Path) -> None:
+    directory = copy_config(tmp_path)
+    path = directory / "workflow.toml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("timeout_seconds = 5", "timeout_seconds = 0", 1),
+        encoding="utf-8",
+    )
+    report = schema.validate_dir(directory)
+    assert report["ok"] is False
+    assert any(error["key"] == "tracing.timeout_seconds" for error in report["errors"])
+
+
+def test_compression_output_ceiling_must_be_positive(tmp_path: Path) -> None:
+    directory = copy_config(tmp_path)
+    path = directory / "workflow.toml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "max_output_tokens = 24000", "max_output_tokens = 0", 1
+        ),
+        encoding="utf-8",
+    )
+    report = schema.validate_dir(directory)
+    assert report["ok"] is False
+    assert any(error["key"] == "compression.max_output_tokens" for error in report["errors"])
+
+
+@pytest.mark.parametrize(
+    "configured",
+    ["../escape.jsonl", "/var/mem.jsonl", "~/mem.jsonl", "C:/temp/mem.jsonl"],
+)
+def test_memory_path_must_stay_under_the_state_root(tmp_path: Path, configured: str) -> None:
+    directory = copy_config(tmp_path)
+    path = directory / "workflow.toml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            'path = "memory/reflections.jsonl"', f'path = "{configured}"', 1
+        ),
+        encoding="utf-8",
+    )
+    report = schema.validate_dir(directory)
+    assert report["ok"] is False
+    assert any(error["key"] == "memory.path" for error in report["errors"])
 
 
 def test_unknown_role_llm_key_fails(tmp_path: Path) -> None:

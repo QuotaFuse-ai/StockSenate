@@ -9,7 +9,7 @@ from starlette.responses import HTMLResponse, Response
 from starlette.routing import Route
 
 from stock_senate.webui.pages.common import as_bool, checked_form, redirect, runtime, split_csv
-from stock_senate.webui.state import today
+from stock_senate.webui.state import JobLimitExceeded, today
 from stock_senate.webui.templates import Html, csrf_input, esc, page, table, tag
 
 _FORM = """
@@ -33,6 +33,8 @@ _FORM = """
     <div><label for="weight">权重（如 bull=0.6, bear=0.4）</label>
       <input id="weight" type="text" name="weight" placeholder="bull=0.6"></div>
   </div>
+  <p class="muted">勾选 HITL 后，分析会在检查点暂停并等待处理，
+     请到 <a href="/reviews">审批</a> 页同意或驳回；超时按配置自动放行并在报告中留痕。</p>
   <p class="muted" style="margin-bottom:0">输出只含研究结论与风险提示，
      不含可执行价位或交易指令。</p>
 </form>
@@ -99,10 +101,14 @@ async def submit(request: Request) -> Response:
         )
     except ValueError as exc:
         return _form_error(request, code, day, str(exc))
+    except JobLimitExceeded as exc:
+        return _form_error(request, code, day, str(exc), status_code=429)
     return redirect(f"/progress/{job.job_id}", notice=f"已启动 {job.code} {job.date} 的分析")
 
 
-def _form_error(request: Request, code: str, day: str, message: str) -> HTMLResponse:
+def _form_error(
+    request: Request, code: str, day: str, message: str, *, status_code: int = 400
+) -> HTMLResponse:
     body = Html(
         _FORM.format(
             csrf=csrf_input(request),
@@ -113,7 +119,7 @@ def _form_error(request: Request, code: str, day: str, message: str) -> HTMLResp
     )
     return HTMLResponse(
         str(page(request, "分析", body, active="/", error=message)),
-        status_code=400,
+        status_code=status_code,
     )
 
 

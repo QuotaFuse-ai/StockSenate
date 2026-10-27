@@ -19,7 +19,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -34,6 +34,19 @@ SESSION_TTL_SECONDS = 12 * 3600
 PUBLIC_PATHS = frozenset({"/login", "/healthz", "/favicon.ico"})
 _LOGIN_WINDOW_SECONDS = 60
 _LOGIN_MAX_FAILURES = 5
+_UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+AUDIT_MAX_BYTES = 1_000_000
+AUDIT_TAIL_BYTES = 256_000
+_SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+        "img-src 'self' data:; connect-src 'self'; form-action 'self'; "
+        "frame-ancestors 'none'; base-uri 'none'"
+    ),
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+}
 
 
 class WebAuth:
@@ -111,13 +124,21 @@ class WebAuth:
         return None if expired else session
 
 
-def set_session_cookie(response: Response, token: str) -> None:
+def _is_https(request: Request) -> bool:
+    forwarded = str(request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    if forwarded:
+        return forwarded == "https"
+    return request.url.scheme == "https"
+
+
+def set_session_cookie(response: Response, token: str, *, secure: bool = False) -> None:
     response.set_cookie(
         COOKIE_NAME,
         token,
         max_age=SESSION_TTL_SECONDS,
         httponly=True,
         samesite="lax",
+        secure=secure,
         path="/",
     )
 
@@ -135,6 +156,25 @@ def csrf_ok(request: Request, form: Any) -> bool:
     return hmac.compare_digest(str(supplied), str(expected))
 
 
+def _cross_site(request: Request) -> bool:
+    """Reject state-changing requests a browser marks as foreign origins.
+
+    The CSRF token already guards forms; this catches requests that arrive
+    without one (login) and fails closed when the Origin disagrees with Host.
+    """
+    site = str(request.headers.get("sec-fetch-site") or "").strip().lower()
+    if site and site not in {"same-origin", "none"}:
+        return True
+    origin = str(request.headers.get("origin") or "").strip().rstrip("/").lower()
+    if not origin:
+        return False
+    host = str(request.headers.get("host") or "").strip().lower()
+    if not host:
+        return True
+    scheme = "https" if _is_https(request) else "http"
+    return origin != f"{scheme}://{host}"
+
+
 class SessionMiddleware(BaseHTTPMiddleware):
     """Reject anonymous requests and attach the signed session to the scope."""
 
@@ -143,6 +183,8 @@ class SessionMiddleware(BaseHTTPMiddleware):
         self.auth = auth
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
+        if request.method in _UNSAFE_METHODS and _cross_site(request):
+            return JSONResponse({"ok": False, "error": "cross_site"}, status_code=403)
         path = request.url.path
         if path in PUBLIC_PATHS or path.startswith("/static/"):
             return await call_next(request)
@@ -162,7 +204,17 @@ class SessionMiddleware(BaseHTTPMiddleware):
         request.state.login_required = self.auth.login_required
         response = await call_next(request)
         if issued:
-            set_session_cookie(response, issued)
+            set_session_cookie(response, issued, secure=_is_https(request))
+        return response
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Attach hardening headers to every response, including rejections."""
+
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
+        response = await call_next(request)
+        for name, value in _SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
         return response
 
 
@@ -173,6 +225,22 @@ class SessionMiddleware(BaseHTTPMiddleware):
 
 def audit_log_path(home: Path | str) -> Path:
     return Path(home) / "webui" / "audit.jsonl"
+
+
+def _rotate_audit(path: Path) -> None:
+    """Keep one previous segment so the trail cannot grow without bound."""
+    try:
+        if path.stat().st_size < AUDIT_MAX_BYTES:
+            return
+    except OSError:
+        return
+    backup = path.with_name(path.name + ".1")
+    try:
+        backup.unlink(missing_ok=True)
+        path.replace(backup)
+    except OSError:
+        # A failed rotation must not lose the write that is about to happen.
+        return
 
 
 def audit_write(home: Path | str, action: str, **fields: Any) -> dict[str, Any]:
@@ -188,6 +256,7 @@ def audit_write(home: Path | str, action: str, **fields: Any) -> dict[str, Any]:
     }
     path = audit_log_path(home)
     path.parent.mkdir(parents=True, exist_ok=True)
+    _rotate_audit(path)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
     audit("webui.write", action=action, **fields)
@@ -198,16 +267,30 @@ def recent_writes(home: Path | str, limit: int = 20) -> list[dict[str, Any]]:
     path = audit_log_path(home)
     if not path.is_file():
         return []
+    try:
+        with path.open("rb") as handle:
+            handle.seek(0, 2)
+            size = handle.tell()
+            start = max(0, size - AUDIT_TAIL_BYTES)
+            handle.seek(start)
+            raw = handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return []
+    lines = raw.splitlines()
+    if start:
+        # The first line starts mid-record; drop it rather than mis-parse it.
+        lines = lines[1:]
     rows: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rows.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    if limit <= 0:
+        return []
     return list(reversed(rows[-limit:]))
 
 
@@ -221,9 +304,21 @@ def _client(request: Request) -> str:
 
 
 def _safe_next(value: str | None) -> str:
-    if value and value.startswith("/") and not value.startswith("//"):
-        return value
-    return "/"
+    """Only accept a same-origin absolute path; anything else lands on ``/``.
+
+    ``RedirectResponse`` turns a ``//host`` target into a protocol-relative
+    URL, so a second leading slash, a backslash (browsers normalise it to
+    ``/``) and their percent-encoded forms are all rejected here.
+    """
+    candidate = str(value or "").strip()
+    if not candidate.startswith("/") or candidate.startswith("//"):
+        return "/"
+    if "\\" in candidate or any(char.isspace() for char in candidate):
+        return "/"
+    decoded = unquote(candidate)
+    if decoded.startswith("//") or "\\" in decoded:
+        return "/"
+    return candidate
 
 
 def _login_page(
@@ -272,7 +367,7 @@ async def login_submit(request: Request) -> Response:
     audit("webui.login", outcome="ok", client=client)
     token, _ = auth.issue()
     response = RedirectResponse(next_path, status_code=303)
-    set_session_cookie(response, token)
+    set_session_cookie(response, token, secure=_is_https(request))
     return response
 
 
@@ -304,6 +399,7 @@ def auth_routes() -> list[Route]:
 __all__ = [
     "COOKIE_NAME",
     "PUBLIC_PATHS",
+    "SecurityHeadersMiddleware",
     "SessionMiddleware",
     "WebAuth",
     "audit_log_path",

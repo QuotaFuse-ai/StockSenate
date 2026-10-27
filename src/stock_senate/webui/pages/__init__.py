@@ -14,6 +14,7 @@ from . import (
     progress,
     queue,
     reports,
+    reviews,
     settings,
 )
 
@@ -25,6 +26,7 @@ _MODULES = (
     backtest,
     alerts,
     queue,
+    reviews,
     settings,
     history,
     ops,

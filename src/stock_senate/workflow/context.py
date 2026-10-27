@@ -31,6 +31,7 @@ class RunContext:
     budget_tripped: str = ""
     skipped: list[dict[str, str]] = field(default_factory=list)
     usage: list[dict[str, Any]] = field(default_factory=list)
+    memory: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def weights(self) -> dict[str, float]:

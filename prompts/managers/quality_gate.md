@@ -23,8 +23,11 @@
 
 ## 输出（QualityVerdict）
 
-- `scores`：`logic`、`evidence`、`citation`
-- `total`：0–100
-- `verdict`：`pass` / `low_quality`
-- `defects`：每条含 `dimension`、`location`、`issue`、`fix_hint`
-- `compliance`：`price_levels_found`（bool）、`disclaimer_present`（bool）
+只输出一个 JSON 对象，不要包裹在 Markdown 里：
+
+- `score`：0–100，三个维度等权平均。
+- `low_quality`：`score < 70` 或存在必须修复的缺陷时为 `true`。
+- `dimensions`：三个键 `logic_coherence`、`evidence_sufficiency`、`citation_accuracy`，每个值为 `{"score": 0–100, "note": "扣分理由，指向具体段落或字段"}`。
+- `defects`：数组，每条为 `{"dimension": "维度键", "location": "段落或字段", "issue": "问题", "fix_hint": "修复建议"}`；没有缺陷时为空数组。
+- `compliance`：`{"price_levels_found": bool, "disclaimer_present": bool}`。
+- `notes`：一句话总结；不得使用「整体不错」这类无定位的评价。

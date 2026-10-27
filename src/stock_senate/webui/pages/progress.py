@@ -64,6 +64,7 @@ async def detail(request: Request) -> Response:
     <dt>标的 / 日期</dt><dd>{esc(snapshot["code"])} · {esc(snapshot["date"])}</dd>
     <dt>状态</dt><dd id="status">{esc(snapshot["status"])}</dd>
     <dt>当前阶段</dt><dd id="stage">{esc(snapshot["stage"])}</dd>
+    <dt>复核</dt><dd id="review">—</dd>
     <dt>报告</dt><dd id="report">{report_cell}</dd>
   </dl>
   <p id="error" class="notice error" style="display:none"></p>
@@ -90,6 +91,16 @@ function tick() {{
       const rated = data.rating ? ' · 结论 ' + data.rating : '';
       document.getElementById('summary').textContent =
         '进度 ' + data.percent + '% · 事件 ' + data.events.length + ' 条' + rated;
+      const review = document.getElementById('review');
+      review.textContent = '';
+      if (data.review_id) {{
+        const link = document.createElement('a');
+        link.href = '/reviews';
+        link.textContent = '待人工复核';
+        review.appendChild(link);
+      }} else {{
+        review.textContent = '—';
+      }}
       const error = document.getElementById('error');
       if (data.error) {{ error.textContent = data.error; error.style.display = 'block'; }}
       const body = document.getElementById('events');

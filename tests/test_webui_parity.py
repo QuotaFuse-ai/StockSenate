@@ -79,7 +79,7 @@ def test_cli_mcp_and_webui_agree_on_one_run(run_state: dict, config_dir: Path) -
     # WebUI: detail page, JSON API and Markdown download all serve that run.
     runtime = WebRuntime(config_dir=config_dir)
     app = create_app(runtime)
-    with TestClient(app, follow_redirects=False) as client:
+    with TestClient(app, base_url="http://127.0.0.1", follow_redirects=False) as client:
         detail = client.get(f"/reports/{run_id}")
         api = client.get(f"/reports/{run_id}/json")
         markdown = client.get(f"/reports/{run_id}/markdown")
