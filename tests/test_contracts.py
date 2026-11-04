@@ -58,4 +58,14 @@ def test_engine_runs_and_persists_the_returned_decision(offline_home: Path) -> N
 
 
 def test_version_is_exported() -> None:
-    assert __version__ == "1.0.1"
+    """版本必须与 pyproject 一致（QUOT-401：pyproject 是唯一真源）。
+
+    以前这里钉死字面量，bump 版本时要么漏改这里、要么漏改 version.py。
+    现在改为与 pyproject 比对，bump 后自动跟随，同时仍然校验「运行期 == 打包」。
+    """
+    import tomllib
+    from pathlib import Path
+
+    with (Path(__file__).resolve().parents[1] / "pyproject.toml").open("rb") as fh:
+        expected = tomllib.load(fh)["project"]["version"]
+    assert __version__ == expected
