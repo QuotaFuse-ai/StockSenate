@@ -299,6 +299,27 @@ ssenate mcp http --port 8765
 - 与数据底座的 MCP 分开命名、分开鉴权、分开日志，通过 `trace_id` 串联。
 - 暴露工具：分析任务、回测、告警查询、报告查询、配置查询。
 
+### 健康检查与版本
+
+MCP（8765）与 WebUI（8788）都提供匿名 `GET /healthz`，返回 `{status, service, version}`；版本只从安装元数据读（未安装源码树时为 `0.0.0+source`）：
+
+```bash
+curl -s http://127.0.0.1:8765/healthz
+# {"service":"stock-senate","status":"ok","version":"1.0.2"}
+```
+
+### 对端部署（peer venv）
+
+```bash
+PYTHON=.venv/Scripts/python.exe bash scripts/build-release.sh   # dist-build/*.whl + SHA256SUMS
+```
+
+- 对端 venv 里的包**只允许** `pip install -e .`（现场联调）或装 wheel；不要把 `src/` 拷进 `site-packages`。
+- **切分支后必须重新 `pip install -e .`**：入口点和依赖在安装那一刻定死，不重装会出现「代码新、入口旧」。
+- 从拷贝安装迁到 editable：先 `rm -rf .venv/Lib/site-packages/stock_senate*`（含 `stocksenate-*.dist-info`），再 `pip install -e ".[mcp,webui]"`。
+- 自检（应无输出）：`ls .venv/Lib/site-packages | grep -E "^stock_senate" || echo clean`。
+- 重启后 `curl -s http://127.0.0.1:8765/healthz` 的 `version` 必须等于 `pyproject.toml` 的版本；不一致说明装的还是旧包。
+
 ---
 
 ## 回测与 performance 的区别
