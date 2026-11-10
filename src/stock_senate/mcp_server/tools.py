@@ -142,6 +142,9 @@ def analyse(
             "code": decision.get("code"),
             "date": decision.get("date"),
             "decision": decision,
+            # Projected to the top level so a read-only consumer (LadderStock)
+            # can render the plain conclusion without walking the decision.
+            "plain": decision.get("plain"),
             "report_path": files.get("report"),
             "report_files": files,
             "data_envelopes": _envelopes(state),
@@ -292,6 +295,7 @@ def report_query(
                 "trade": dict(state.get("trade") or {}),
                 "risk": dict(state.get("risk") or {}),
                 "decision": dict(state.get("decision") or {}),
+                "plain": dict(state.get("decision") or {}).get("plain"),
                 "quality": dict(state.get("quality") or {}),
                 "hitl": dict(state.get("hitl") or {}),
             },

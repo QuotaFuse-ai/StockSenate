@@ -128,6 +128,9 @@ def _coerce(
         raise RoleOutputError("模型输出不是 JSON 对象")
     allowed = set(schema.model_fields)
     cleaned = {key: value for key, value in payload.items() if key in allowed}
+    # The plain-language layer is derived from validated data and citations only;
+    # a model must never be able to author it, so any attempt is dropped here.
+    cleaned.pop("plain", None)
     cleaned.setdefault("role", spec.key)
     if spec.output_schema == "ResearchArgument":
         cleaned.setdefault("side", context.get("side") or "bull")

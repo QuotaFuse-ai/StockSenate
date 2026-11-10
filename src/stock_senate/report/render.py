@@ -31,6 +31,7 @@ DIRECTION_LABEL = {"long": "偏多", "short": "偏空", "flat": "无方向", "un
 SEVERITY_LABEL = {"high": "高", "mid": "中", "low": "低", "unknown": "未知"}
 
 _DEFAULT_SECTIONS = [
+    ("plain", "白话结论"),
     ("analysts", "一、分析师观点"),
     ("research", "二、多空辩论与研究经理结论"),
     ("trade", "三、交易方案"),
@@ -88,6 +89,7 @@ def render_summary(state: Mapping[str, Any]) -> dict[str, Any]:
         "low_quality": bool(decision.get("low_quality")),
         "quality_score": quality.get("score"),
         "quality_threshold": quality.get("threshold"),
+        "plain": decision.get("plain"),
         "data": data,
         "skipped": list(decision.get("skipped") or []),
         "budget": dict(state.get("budget") or {}),
@@ -123,6 +125,9 @@ def render_markdown(
     lines.append(f"- 运行状态：{status}{flag} · trace：`{state.get('trace_id', '')}`")
     lines.append("")
 
+    # The plain-language conclusion comes first: it is the section a reader
+    # without finance background needs before any role detail.
+    lines.extend(_render_plain(state, titles["plain"]))
     if not compact:
         lines.extend(_render_analysts(state, titles["analysts"]))
     lines.extend(_render_research(state, titles["research"], compact=compact))
@@ -147,6 +152,85 @@ def render_markdown(
             lines.append(_safe(paragraph))
     lines.append("")
     return "\n".join(lines)
+
+
+def _evidence_line(evidence: list[Any]) -> str:
+    parts = []
+    for citation in evidence:
+        if not isinstance(citation, Mapping):
+            continue
+        where = " · ".join(
+            str(citation.get(key) or "")
+            for key in ("domain", "source", "data_as_of", "detail")
+            if str(citation.get(key) or "").strip()
+        )
+        if where:
+            parts.append(f"`{where}`")
+    return "；".join(parts)
+
+
+def _render_plain(state: Mapping[str, Any], title: str) -> list[str]:
+    decision = dict(state.get("decision") or {})
+    plain = decision.get("plain")
+    if not isinstance(plain, Mapping) or not plain:
+        return []
+    out = [f"## {title}", ""]
+
+    what = dict(plain.get("what") or {})
+    out.append(f"**这是什么**：{_safe(what.get('text'))}")
+    what_evidence = [item for item in what.get("evidence") or [] if isinstance(item, Mapping)]
+    out.append(
+        "  - 依据：" + _evidence_line(what_evidence)
+        if what_evidence
+        else "  - 依据：无（中性说明，不做方向判断）"
+    )
+    out.append("")
+
+    out.append("**为什么**")
+    out.extend(_plain_claims(plain.get("why")))
+    out.append("")
+    out.append("**风险点**")
+    out.extend(_plain_claims(plain.get("risks")))
+    out.append("")
+
+    if plain.get("confidence_note"):
+        out.append(f"- {_safe(plain['confidence_note'])}")
+    flags = [str(flag) for flag in plain.get("risk_flags") or [] if str(flag).strip()]
+    if flags:
+        out.append("")
+        out.append("**风险与数据提示**")
+        out.extend(_bullets(flags, limit=8))
+    glossary = [item for item in plain.get("glossary") or [] if isinstance(item, Mapping)]
+    if glossary:
+        out.append("")
+        out.append("**名词小抄**")
+        out.extend(
+            f"- **{_safe(item.get('term'))}**：{_safe(item.get('note'))}" for item in glossary[:6]
+        )
+    dropped = int(plain.get("omitted_claims") or 0)
+    blocked = int(plain.get("redline_blocked") or 0)
+    if dropped or blocked:
+        notes = []
+        if dropped:
+            notes.append(f"省略 {dropped} 条没有证据支撑的论断")
+        if blocked:
+            notes.append(f"拦截 {blocked} 条触碰荐股红线的表述")
+        out.append("")
+        out.append("- 合规降级：" + "；".join(notes) + "。")
+    out.append("")
+    return out
+
+
+def _plain_claims(claims: Any) -> list[str]:
+    lines: list[str] = []
+    for claim in claims or []:
+        if not isinstance(claim, Mapping):
+            continue
+        lines.append(f"- {_safe(claim.get('text'))}")
+        evidence = [item for item in claim.get("evidence") or [] if isinstance(item, Mapping)]
+        if evidence:
+            lines.append("  - 依据：" + _evidence_line(evidence))
+    return lines or ["- 本次没有可核验的来源，因此不展开。"]
 
 
 def _render_analysts(state: Mapping[str, Any], title: str) -> list[str]:
