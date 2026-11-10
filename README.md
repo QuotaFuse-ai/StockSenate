@@ -199,6 +199,11 @@ print(decision["rating"], decision["reason"])
 - `propagate(code, date)` 返回 `(final_state, decision)` 二元组，签名稳定。
 - `TradingAgentsGraph` 保留为 `SenateGraph` 的别名。
 - `summary.json`、`complete_report.md` 是衍生输出，不替代返回值。
+- `decision["plain"]` 是面向普通人的白话结论（这是什么 / 为什么 / 风险点）：
+  每条论断都挂着本次运行真实产生的 `Citation`，没有证据的论断不会出现；
+  置信度直接沿用 `decision["confidence"]`。同一份内容也写进 `summary.json`、
+  Markdown 报告和 MCP 工具返回（`stock_senate_analysis` 的 `plain` 字段、
+  `stock_senate_report_query` 的 `summary.plain` / `sections.plain`）。
 
 ### 旧命令兼容
 

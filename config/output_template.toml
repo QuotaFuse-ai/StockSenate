@@ -7,6 +7,12 @@ language = "zh-CN"
 include_disclaimer = true
 include_data_envelope = true
 
+# 白话结论：这是什么 / 为什么 / 风险点，逐条挂证据（QUOT-536）。
+# 顺序固定在报告最前面；没有白话内容时整段自动跳过。
+[sections.plain]
+title = "白话结论"
+source = "plain_conclusion"
+
 [sections.analysts]
 title = "一、分析师观点"
 source = "analyst_reports"

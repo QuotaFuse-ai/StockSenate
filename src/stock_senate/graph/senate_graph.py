@@ -25,6 +25,7 @@ from stock_senate.data.router import DataAccessLayer, summarize
 from stock_senate.observability.logging import configure_from_config, new_trace_id, redact
 from stock_senate.observability.tracing import configure_tracing
 from stock_senate.observability.tracing import span as trace_span
+from stock_senate.report.plain import build_plain_conclusion
 from stock_senate.roles.llm import LLMConfigError, LLMRateLimited
 from stock_senate.roles.registry import RoleError, RoleRegistry
 from stock_senate.roles.schemas import (
@@ -407,6 +408,38 @@ class SenateGraph:
         # from ``cached`` by now.
         resumed_stages = [name for name in cached.names if name != "_run_state"]
 
+        partial = (
+            bool(decision.partial)
+            or decision.rating == "unknown"
+            or bool(ctx.skipped)
+            or bool(ctx.budget_tripped)
+            or hitl_blocked(traces)
+            or bool(quality.partial)
+        )
+
+        # Derived after the verdict and the quality gate, so it describes the
+        # conclusions a reader actually receives. No model call, no new facts.
+        stage = "plain_conclusion"
+        with _stage_span(stage):
+            _progress(progress, stage, "running")
+            plain = build_plain_conclusion(
+                decision,
+                analysts=analysts,
+                envelopes=envelopes,
+                digest=digest,
+                low_quality=bool(decision.low_quality or quality.low_quality),
+                partial=partial,
+            )
+            decision = decision.model_copy(update={"plain": plain})
+            _progress(
+                progress,
+                stage,
+                "done",
+                why=len(plain.why),
+                risks=len(plain.risks),
+                degraded=plain.degraded,
+            )
+
         reflection = build_reflection(
             code=code,
             date=as_of,
@@ -418,15 +451,6 @@ class SenateGraph:
             hitl=hitl_payload,
         )
         memory_saved = memory_store.remember(reflection)
-
-        partial = (
-            bool(decision.partial)
-            or decision.rating == "unknown"
-            or bool(ctx.skipped)
-            or bool(ctx.budget_tripped)
-            or hitl_blocked(traces)
-            or bool(quality.partial)
-        )
 
         state: dict[str, Any] = {
             "run_id": run_id,
@@ -483,6 +507,7 @@ class SenateGraph:
             "confidence": decision.confidence,
             "reasons": list(decision.reasons),
             "risks": list(decision.risks),
+            "plain": plain.model_dump(),
             "partial": partial,
             "low_quality": bool(decision.low_quality or quality.low_quality),
             "quality_score": quality.score,
