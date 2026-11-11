@@ -59,3 +59,6 @@ desktop.ini
 # They live in the team's private archive outside the checkout.
 councli*
 docs/
+
+# QUOT-401: 最小包产物
+dist-build/
