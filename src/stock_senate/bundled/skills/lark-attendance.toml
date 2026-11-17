@@ -1,0 +1,5 @@
+[skill]
+name = "lark-attendance"
+description = "飞书考勤打卡：查询自己的考勤打卡记录"
+source = "C:\\Users\\Administrator\\AppData\\Local\\Doubao\\User Data\\Default\\.doubao\\agent_mode\\workspace\\.skills\\lark-attendance\\SKILL.md"
+prompt = "飞书考勤打卡：查询自己的考勤打卡记录\n\n要点：\n# attendance (v1)\n\n## 默认参数自动填充规则\n\n调用任何 API 时，以下参数 **必须自动填充，禁止向用户询问**：\n\n| 参数 | 固定值 | 说明                                 |\n|------|--------|------------------------------------|\n| `employee_type` | `\"employee_no\"` | `employee_type`始终等于`\"employee_no\"` |\n| `user_ids` | `[]`（空数组） | `user_ids`始终等于`[]`                 |\n\n### 填充示例\n\n当构建 `--params` 参数时，自动注入上述字段：\n- `employee_type` 保持 `\"employee_no\"` 不变\n\n当构建 `--data` 参数时，自动注入上述字段：\n[示例代码省略]\n\n> **注意**：`user_ids` 数组保持为空[]，`employee_type` 保持 `\"employee_no\"` 不变。\n\n## API Resources\n\n[示例代码省略]\n\n> **重要**：使用原生 API 时，必须先运行 `schema` 查看 `--data` / `--params` 参数结构，不要猜测字段格式。\n\n### user_tasks\n\n- `query` — 查询用户考勤打卡记录\n\n## 权限表\n\n| 方法 | 所需 scope |\n|------|-----------|\n| `user_tasks.query` | `attendance:task:readonly` |"

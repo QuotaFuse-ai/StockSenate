@@ -44,6 +44,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
         "roles": {
             "market": {
                 "display_name": "市场分析师",
+                "description": "看量价、趋势与资金流，判断当前位置与动能强弱。",
                 "kind": "analyst",
                 "enabled": True,
                 "tools": ["kline", "quote", "money_flow"],
@@ -51,6 +52,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "social": {
                 "display_name": "情绪分析师",
+                "description": "看社区与社媒讨论的热度、方向与持续性，识别情绪拐点。",
                 "kind": "analyst",
                 "enabled": True,
                 "tools": ["social_buzz", "news"],
@@ -58,6 +60,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "news": {
                 "display_name": "新闻分析师",
+                "description": "看新闻与公告的传导路径和影响窗口，区分已兑现与未兑现。",
                 "kind": "analyst",
                 "enabled": True,
                 "tools": ["news", "announcement"],
@@ -65,6 +68,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "fundamentals": {
                 "display_name": "基本面分析师",
+                "description": "看增长、盈利、资产、估值四类财务与经营指标的质量。",
                 "kind": "analyst",
                 "enabled": True,
                 "tools": ["financial"],
@@ -72,6 +76,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "policy": {
                 "display_name": "政策分析师",
+                "description": "看政策层级、所处阶段、传导路径与可观察的落地指标。",
                 "kind": "analyst",
                 "enabled": True,
                 "tools": ["policy_feed", "news"],
@@ -79,6 +84,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "hot_money": {
                 "display_name": "游资追踪",
+                "description": "看龙虎榜席位与主力资金结构，判断短线资金意图。",
                 "kind": "analyst",
                 "enabled": True,
                 "tools": ["dragon_tiger", "money_flow"],
@@ -86,6 +92,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "lockup": {
                 "display_name": "解禁观察",
+                "description": "看限售解禁窗口、股东类型与流动性吸收能力。",
                 "kind": "analyst",
                 "enabled": True,
                 "tools": ["lockup_calendar", "announcement"],
@@ -93,6 +100,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "bull": {
                 "display_name": "多头研究员",
+                "description": "只从多方立场组织论点，找最强看多证据并回应空方质疑。",
                 "kind": "researcher",
                 "enabled": True,
                 "tools": [],
@@ -100,6 +108,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "bear": {
                 "display_name": "空头研究员",
+                "description": "只从空方立场组织论点，找最强看空证据并回应多方质疑。",
                 "kind": "researcher",
                 "enabled": True,
                 "tools": [],
@@ -107,6 +116,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "research_manager": {
                 "display_name": "研究经理",
+                "description": "汇总多空论点，形成研究评级并给出改变评级的条件。",
                 "kind": "manager",
                 "enabled": True,
                 "tools": [],
@@ -114,6 +124,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "trader": {
                 "display_name": "交易员",
+                "description": "把研究结论落成方向、周期与理由，不输出价位与仓位。",
                 "kind": "trader",
                 "enabled": True,
                 "tools": ["kline", "quote"],
@@ -121,6 +132,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "risk_aggressive": {
                 "display_name": "激进风险辩手",
+                "description": "只强调机会与上行空间，同时压测保守观点的漏洞。",
                 "kind": "risk",
                 "enabled": True,
                 "tools": [],
@@ -128,6 +140,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "risk_neutral": {
                 "display_name": "中立风险辩手",
+                "description": "在激进与保守之间找平衡，指出信息缺口对结论的影响。",
                 "kind": "risk",
                 "enabled": True,
                 "tools": [],
@@ -135,6 +148,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "risk_conservative": {
                 "display_name": "保守风险辩手",
+                "description": "只强调下行风险与失效条件，优先守住不亏。",
                 "kind": "risk",
                 "enabled": True,
                 "tools": [],
@@ -142,6 +156,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "portfolio_manager": {
                 "display_name": "投资经理",
+                "description": "汇总全部角色观点与质量分，给出最终评级与理由。",
                 "kind": "manager",
                 "enabled": True,
                 "tools": [],
@@ -149,6 +164,7 @@ _BUILTIN_DEFAULTS: dict[str, Any] = {
             },
             "quality_gate": {
                 "display_name": "质量闸门",
+                "description": "给报告打质量分，指出硬伤所在位置并给出修法。",
                 "kind": "judge",
                 "enabled": True,
                 "tools": [],
@@ -297,6 +313,9 @@ def default_config_dir() -> Path | None:
     candidate = package_root / "config"
     if candidate.is_dir():
         return candidate
+    bundled = Path(__file__).resolve().parents[1] / "bundled" / "config"
+    if bundled.is_dir():
+        return bundled
     return None
 
 

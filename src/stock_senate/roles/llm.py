@@ -73,6 +73,8 @@ class ModelTarget:
     role: str
     provider: str
     model: str
+    api_key: str | None = None
+    base_url: str | None = None
 
 
 def _call_span(target: ModelTarget, schema_name: str) -> Any:
@@ -276,8 +278,27 @@ class RoleLLMResolver:
         key = self._canonical(role)
         entry = self.role_llms.get(key)
         if isinstance(entry, Mapping) and entry.get("provider") and entry.get("model"):
-            return ModelTarget(role=key, provider=str(entry["provider"]), model=str(entry["model"]))
+            return ModelTarget(
+                role=key,
+                provider=str(entry["provider"]),
+                model=str(entry["model"]),
+                api_key=self._entry_key(entry),
+                base_url=str(entry.get("backend_url") or "") or None,
+            )
         return ModelTarget(role=key, provider=self.provider, model=self.default_model)
+
+    @staticmethod
+    def _entry_key(entry: Mapping[str, Any]) -> str | None:
+        """角色级密钥：明文 ``api_key`` 优先，其次 ``api_key_env`` 指向的变量。"""
+        literal = entry.get("api_key")
+        if literal:
+            return str(literal)
+        env_name = entry.get("api_key_env")
+        if env_name:
+            value = os.environ.get(str(env_name))
+            if value:
+                return value
+        return None
 
     def _canonical(self, role: str) -> str:
         key = str(role or "").strip()
@@ -288,16 +309,17 @@ class RoleLLMResolver:
         return key
 
     def client(self, target: ModelTarget) -> Any:
-        cache_key = (target.provider, target.model)
+        provider = target.provider.lower()
+        api_key = self._api_key(provider, target.api_key)
+        base_url = target.base_url or self._base_url(provider)
+        cache_key = (target.provider, target.model, api_key or "", base_url)
         if cache_key in self._clients:
             return self._clients[cache_key]
-        provider = target.provider.lower()
         if provider in _SDK_PROVIDERS:
             raise LLMConfigError(
                 f"provider {target.provider!r} 需要 claude-agent-sdk，当前未安装；"
                 "请改用 anthropic 或把 llm_provider 设为 offline"
             )
-        api_key = self._api_key(provider)
         if provider in _ANTHROPIC_PROVIDERS:
             client: Any = AnthropicClient(
                 model=target.model,
@@ -309,7 +331,7 @@ class RoleLLMResolver:
             client = OpenAICompatibleClient(
                 provider,
                 model=target.model,
-                base_url=self._base_url(provider),
+                base_url=base_url,
                 api_key=api_key,
                 timeout=self.timeout,
                 max_tokens=self.max_tokens,
@@ -317,7 +339,17 @@ class RoleLLMResolver:
         self._clients[cache_key] = client
         return client
 
-    def _api_key(self, provider: str) -> str | None:
+    def _api_key(self, provider: str, override: str | None = None) -> str | None:
+        """密钥解析顺序：角色级明文 → 全局明文 → 指定变量 → 约定变量。
+
+        反代这类不校验密钥的网关也需要一个非空值，否则客户端不会发送
+        ``Authorization`` 头，网关会直接判定「未提供凭据」。
+        """
+        if override:
+            return override
+        literal = self.llm.get("api_key")
+        if literal:
+            return str(literal)
         configured = self.llm.get("api_key_env")
         names = ["STOCKSENATE_LLM_API_KEY"]
         if configured:

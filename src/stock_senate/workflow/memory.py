@@ -14,6 +14,8 @@ research conclusions, never executable price levels or order instructions.
 from __future__ import annotations
 
 import json
+import os
+import urllib.request
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -144,6 +146,49 @@ class MemoryStore:
         return (self.settings or {}).get("enabled", True) is not False
 
     @property
+    def backend(self) -> str:
+        """记忆后端：``local``（项目目录 JSONL）或 ``mem0``（外部服务）。"""
+        value = str((self.settings or {}).get("backend") or "local").strip().lower()
+        return value if value in {"local", "mem0"} else "local"
+
+    def stats(self, *, code: str | None = None) -> dict[str, Any]:
+        """条目统计，供设置页显示「已经记了几条记忆」。"""
+        path = self.path
+        result: dict[str, Any] = {
+            "backend": self.backend,
+            "enabled": self.enabled,
+            "path": str(path),
+            "exists": path.is_file(),
+            "total": 0,
+            "for_code": 0,
+        }
+        if not path.is_file():
+            return result
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            result["error"] = str(exc)[:200]
+            return result
+        total = 0
+        matched = 0
+        for line in lines:
+            text = line.strip()
+            if not text:
+                continue
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            total += 1
+            if code and str(parsed.get("code") or "") == code:
+                matched += 1
+        result["total"] = total
+        result["for_code"] = matched
+        return result
+
+    @property
     def path(self) -> Path:
         configured = str((self.settings or {}).get("path") or DEFAULT_PATH).strip()
         configured = configured.replace("\\", "/")
@@ -214,7 +259,61 @@ class MemoryStore:
                 "memory write failed", extra={"event": "memory_write_failed", "error": str(exc)}
             )
             return False
+        if self.backend == "mem0":
+            self._mirror_to_mem0(record)
         return True
+
+    def _mirror_to_mem0(self, record: Mapping[str, Any]) -> None:
+        """把同一条反思镜像到 mem0；服务不可用时只记日志，不影响本次运行。
+
+        本地 JSONL 始终是权威副本，mem0 是可选的外部镜像，这样即使 mem0
+        掉线，记忆也不会丢，下次分析照常能读到。
+        """
+        url = str((self.settings or {}).get("mem0_url") or "").strip().rstrip("/")
+        if not url:
+            return
+        payload = {
+            "messages": [{"role": "assistant", "content": self._mem0_text(record)}],
+            "user_id": str((self.settings or {}).get("mem0_user_id") or "stock_senate"),
+            "metadata": {
+                "code": str(record.get("code") or ""),
+                "run_id": str(record.get("run_id") or ""),
+                "source": "stock_senate",
+            },
+        }
+        api_key = (self.settings or {}).get("mem0_api_key")
+        if not api_key:
+            env_name = (self.settings or {}).get("mem0_api_key_env")
+            if env_name:
+                api_key = os.environ.get(str(env_name))
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        try:
+            request = urllib.request.Request(
+                f"{url}/v1/memories/",
+                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
+            with urllib.request.urlopen(
+                request, timeout=float((self.settings or {}).get("mem0_timeout", 10))
+            ) as response:
+                response.read()
+        except Exception as exc:  # noqa: BLE001 - mirroring must never break a run
+            get_logger("memory").warning(
+                "mem0 mirror failed",
+                extra={"event": "mem0_mirror_failed", "error": str(exc)[:200]},
+            )
+
+    @staticmethod
+    def _mem0_text(record: Mapping[str, Any]) -> str:
+        parts = [
+            str(record.get("code") or ""),
+            str(record.get("rating") or ""),
+            str(record.get("summary") or ""),
+        ]
+        return " ".join(part for part in parts if part).strip() or "stock_senate reflection"
 
 
 __all__ = [

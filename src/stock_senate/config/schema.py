@@ -70,15 +70,17 @@ _ANY = "*"
 
 _ROLE_ENTRY = {
     "display_name",
+    "description",
     "kind",
     "alias",
     "prompt",
+    "skills",
     "tools",
     "output_schema",
     "enabled",
     "weight",
 }
-_LLM_ROLE_ENTRY = {"provider", "model"}
+_LLM_ROLE_ENTRY = {"provider", "model", "api_key", "api_key_env", "backend_url"}
 _STRUCTURED = {"enabled", "max_local_retries", "mark_partial_on_failure"}
 _FALLBACK = {"chain": None}
 
@@ -155,6 +157,12 @@ _KNOWN_KEYS: dict[str, dict[str, Any]] = {
             "enabled": None,
             "path": None,
             "max_entries": None,
+            "backend": None,
+            "mem0_url": None,
+            "mem0_api_key": None,
+            "mem0_api_key_env": None,
+            "mem0_user_id": None,
+            "mem0_timeout": None,
         },
         "tracing": {
             "enabled": None,

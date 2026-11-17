@@ -1,0 +1,5 @@
+[skill]
+name = "doubao-record"
+description = "「录音转写」技能：现场录制面聊或会议并实时转写，结束后生成纪要。用于发起录音，及录音中查询内容和状态；面向新录音，不处理已有音频文件。用户选中本技能未输入内容时，通常是想开始录音。"
+source = "C:\\Users\\Administrator\\AppData\\Local\\Doubao\\User Data\\Default\\.doubao\\agent_mode\\workspace\\.skills\\doubao-record\\SKILL.md"
+prompt = "「录音转写」技能：现场录制面聊或会议并实时转写，结束后生成纪要。用于发起录音，及录音中查询内容和状态；面向新录音，不处理已有音频文件。用户选中本技能未输入内容时，通常是想开始录音。\n\n要点：\n## doubao-record（录音转写）\n一句话描述：用户是想「发起录音」还是「录音过程中，询问录音相关问题」\n- 想要发起录音 → 用 start_recording\n- 录音过程中，用户询问与录音内容相关的问题 → 用 get_recording\n\n## 工具是什么\n- start_recording：启动当前飞书会话的录音，成功后立即返回 record_id 作为后续查询的唯一句柄。\n- get_recording：按 record_id 查询指定录音的聚合信息，返回录音元信息(创建时间、创建地点、录音状态、创建人)、录音内容。录音过程中，当用户问『刚才说了什么』或『这场会的纪要给我』时，或需要判断录音状态时调用。不要用它启动录音；不要传编造的 record_id。\n\n## 使用场景\n- 用户明确有语音记录/开始录音记录 → start_recording\n- 用户录音中，要读取、查看、总结录音相关内容时 → get_recording\n- 录音已完成，再次触发录音转写，则新开一场 → start_recording\n\n## 核心流程\n- 调用 start_recording 时，成功后立即返回 record_id 作为后续查询的唯一句柄\n- 使用 start_recording 成功发起录音后，请用自然语言告知用户录音过程中会记录说话内容、录音结束后会为用户生成纪要文档。\n- get_recording 是判断录音的状态的重要依据，你需要使用 get_recording 获取、更新准确的录音状态，不能根据对话上下文自行假设。\n- 调用 get_recording 时，按 record_id 查询指定录音的聚合信息，返回录音元信息(创建时间、创建地点、录音状态、创建人)、录音内容"

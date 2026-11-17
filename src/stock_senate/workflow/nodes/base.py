@@ -11,6 +11,7 @@ silent hole in the report.
 from __future__ import annotations
 
 import copy
+import tomllib
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -50,7 +51,45 @@ def prompt_root(config: Mapping[str, Any]) -> Path | None:
     for parent in here.parents:
         if (parent / "prompts").is_dir():
             return parent
+    bundled = here.parents[2] / "bundled"
+    if (bundled / "prompts").is_dir():
+        return bundled
     return None
+
+
+def skills_root(config: Mapping[str, Any]) -> Path | None:
+    """技能定义目录：与 ``config/`` 同级，缺省回退到包内 ``bundled/skills``。"""
+    config_dir = config.get("config_dir")
+    if config_dir:
+        candidate = Path(str(config_dir)).expanduser().parent / "skills"
+        if candidate.is_dir():
+            return candidate
+    here = Path(__file__).resolve()
+    bundled = here.parents[2] / "bundled" / "skills"
+    if bundled.is_dir():
+        return bundled
+    return None
+
+
+def load_skill_block(spec: RoleSpec, config: Mapping[str, Any]) -> str:
+    """把角色勾选的技能拼成附加提示词；找不到定义时只保留技能名。"""
+    if not spec.skills:
+        return ""
+    root = skills_root(config)
+    blocks: list[str] = []
+    for name in spec.skills:
+        body = ""
+        if root:
+            path = root / f"{name}.toml"
+            if path.is_file():
+                try:
+                    data = tomllib.loads(path.read_text(encoding="utf-8"))
+                    section = data.get("skill") or data
+                    body = str(section.get("prompt") or "").strip()
+                except (OSError, tomllib.TOMLDecodeError):
+                    body = ""
+        blocks.append(f"## 技能：{name}\n{body}" if body else f"## 技能：{name}")
+    return "\n\n".join(blocks)
 
 
 def load_system_prompt(spec: RoleSpec, config: Mapping[str, Any]) -> str:
@@ -60,10 +99,14 @@ def load_system_prompt(spec: RoleSpec, config: Mapping[str, Any]) -> str:
             root = prompt_root(config)
             path = (root / path) if root else path
         if path.is_file():
-            return path.read_text(encoding="utf-8")
+            base_text = path.read_text(encoding="utf-8")
+            block = load_skill_block(spec, config)
+            return f"{base_text}\n\n{block}" if block else base_text
         if spec.custom:
             raise NodeConfigError(f"自定义角色 {spec.key} 的 prompt 文件不存在：{spec.prompt}")
-    return BUILTIN_PROMPT.format(display=spec.display_name, schema=spec.output_schema)
+    base_text = BUILTIN_PROMPT.format(display=spec.display_name, schema=spec.output_schema)
+    block = load_skill_block(spec, config)
+    return f"{base_text}\n\n{block}" if block else base_text
 
 
 def _fallback_payload(spec: RoleSpec, context: Mapping[str, Any], reason: str) -> dict[str, Any]:

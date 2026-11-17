@@ -1,0 +1,5 @@
+[skill]
+name = "tickhub-cn"
+description = "A股行情、财务、资金流、龙虎榜、公告、研报等真实数据的取数口径与缺口报法。"
+source = "D:\\multica_workspaces\\quotafuse-g-066955b36a89\\quot-465-ac9d968be7ea\\workdir\\TickHub-CN\\skills\\tickhub-cn\\SKILL.md"
+prompt = "所有数字必须来自 TickHub 的工具调用结果，禁止推断、插值、凭记忆或按常识补数。\n\n数据为空时按 meta.note 说明「该来源无此记录」，不得编造替代值。\n派生指标（价差、增速、占比）要同时给出工具来源的输入与计算公式。\n每个引用数字保留 meta.source；写报告时保留 meta.trace_id，便于复核。\nmeta.confidence 为 A（交易所/官方）、B（商业聚合）、C（派生或第三方抓取）；混用时必须标注 C。\n批量取数优先用批量工具（一次最多 50 个代码），不要逐个循环。\n历史问题优先传 data_as_of，避免拿到最新修订值。\n遇到 QFSD-9001 表示参数写错，应改参数而不是重试；QFSD-7001 表示限流，退避后再试。"

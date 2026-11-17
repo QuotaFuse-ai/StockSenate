@@ -12,7 +12,7 @@ Price levels, position sizes and order identifiers are not fields here, and
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -21,8 +21,95 @@ Rating = Literal["buy", "overweight", "hold", "underweight", "sell", "unknown"]
 Horizon = Literal["intraday", "short", "medium", "long", "unknown"]
 
 
+#: 枚举字段：模型常按提示词写成 `Hold` / `Bull` 这种首字母大写形式，
+#: 而契约（以及下游落库）只认小写字面量。统一在入口做大小写归一，
+#: 避免把「大小写」当成「格式错误」把整个角色判成 partial。
+ENUM_FIELDS = frozenset({"side", "stance", "rating", "horizon", "direction", "severity"})
+
+#: 提示词里这些字段要求「每条一句」，模型常给成
+#: ``{"category": "growth", "point": "..."}`` 这种对象。契约是 ``list[str]``，
+#: 因此在这一层把对象压平成一句可读文本，而不是把整个角色判成不可用。
+TEXT_LIST_FIELDS = frozenset(
+    {
+        "key_points",
+        "points",
+        "rebuttals",
+        "rationale",
+        "risks",
+        "reasons",
+        "unresolved",
+        "data_gaps",
+        "risk_flags",
+    }
+)
+
+#: 提示词把 confidence 描述为 high / medium / low，契约是 0–1 浮点，这里做映射。
+CONFIDENCE_LEVELS = {
+    "high": 0.8,
+    "medium": 0.5,
+    "low": 0.2,
+    "unknown": 0.0,
+    "较高": 0.75,
+    "中等": 0.5,
+    "较低": 0.25,
+    "高": 0.8,
+    "中": 0.5,
+    "低": 0.2,
+}
+
+
+def _flatten_text_item(item: Any) -> str:
+    """把模型给出的单条要点压成一行文本，保留可读顺序。"""
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        parts = [str(v).strip() for v in item.values() if isinstance(v, (str, int, float))]
+        parts = [p for p in parts if p]
+        return "：".join(parts) if parts else str(item)
+    return str(item)
+
+
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_loose_fields(cls, data: Any) -> Any:
+        """把「格式不一致」挡在契约之外，而不是把整个角色判成 partial。
+
+        覆盖三类提示词与契约之间的表述差异：枚举大小写、confidence 档位词、
+        文本列表被写成对象。
+        """
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+
+        for key in ENUM_FIELDS:
+            value = out.get(key)
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                if normalized != value:
+                    out[key] = normalized
+
+        confidence = out.get("confidence")
+        if isinstance(confidence, str):
+            token = confidence.strip().lower()
+            if token in CONFIDENCE_LEVELS:
+                out["confidence"] = CONFIDENCE_LEVELS[token]
+            elif token.endswith("%"):
+                try:
+                    out["confidence"] = max(0.0, min(1.0, float(token[:-1]) / 100.0))
+                except ValueError:
+                    pass
+
+        for key in TEXT_LIST_FIELDS:
+            value = out.get(key)
+            if isinstance(value, str):
+                out[key] = [value]
+            elif isinstance(value, list) and any(not isinstance(x, str) for x in value):
+                out[key] = [_flatten_text_item(x) for x in value]
+
+        return out
 
 
 class Citation(StrictModel):

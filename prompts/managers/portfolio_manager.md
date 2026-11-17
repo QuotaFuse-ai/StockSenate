@@ -14,15 +14,15 @@
 1. 判断风险辩论是否改变了研究结论：
    - 未改变 → 维持评级，说明风险已被定价或影响有限
    - 改变 → 说明是哪一条风险论据触发了改变
-2. 形成最终 `rating`（Buy / Hold / Sell）与 `reason`。
+2. 形成最终 `rating`（buy / hold / sell）与 `reason`。
 3. 列出 A 股约束标记：T+1、涨跌停、ST、流动性、解禁窗口等是否影响结论。
 4. 给出置信度与「结论最容易被什么推翻」。
 5. 输出必须包含免责声明。
 
 ## 决策原则
 
-- 质量闸门 < 70 时，评级强度不得高于 `Hold`，并在 `risk_flags` 中标注 `low_quality`。
-- 数据 `missing` 的关键域超过阈值时，倾向于 `Hold`。
+- 质量闸门 < 70 时，评级强度不得高于 `hold`，并在 `risk_flags` 中标注 `low_quality`。
+- 数据 `missing` 的关键域超过阈值时，倾向于 `hold`。
 - 三方风险论证一致反对时，必须明确回应，不得忽略。
 
 ## 严格禁止（DEC-006）
@@ -33,7 +33,7 @@
 
 ## 输出（FinalDecision）
 
-- `rating`：Buy / Hold / Sell
+- `rating`：buy / hold / sell
 - `reason`：4–8 句，串起研究结论与风险裁决
 - `risk_flags`：A 股约束与质量标记
 - `confidence`

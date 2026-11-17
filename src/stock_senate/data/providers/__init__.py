@@ -17,6 +17,7 @@ from stock_senate.data.providers.base import (
 )
 from stock_senate.data.providers.composite import CompositeProvider
 from stock_senate.data.providers.local_json import LocalJsonProvider
+from stock_senate.data.providers.qdrant import QdrantProvider
 from stock_senate.data.providers.sql import SqlProvider
 from stock_senate.data.providers.text_doc import TextDocProvider
 from stock_senate.data.providers.tickhub import TickHubProvider
@@ -29,6 +30,7 @@ _BY_KIND: dict[str, Callable[..., Provider]] = {
     "sql": SqlProvider,
     "composite": CompositeProvider,
     "mcp": TickHubProvider,
+    "qdrant": QdrantProvider,
 }
 
 

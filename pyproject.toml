@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stocksenate"
-version = "1.0.2"
+version = "1.0.4"
 description = "StockSenate: multi-role AI investment research senate (analysis and backtest simulation only)"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -76,7 +76,12 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-stock_senate = ["py.typed"]
+stock_senate = [
+  "py.typed",
+  "bundled/config/*.toml",
+  "bundled/prompts/**/*.md",
+  "bundled/skills/*.toml",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

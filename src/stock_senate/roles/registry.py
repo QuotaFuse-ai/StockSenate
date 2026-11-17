@@ -33,6 +33,8 @@ class RoleSpec:
     aliases: tuple[str, ...] = ()
     custom: bool = False
     weight: float = 1.0
+    description: str = ""
+    skills: tuple[str, ...] = ()
 
     @property
     def is_analyst(self) -> bool:
@@ -42,11 +44,13 @@ class RoleSpec:
         return {
             "role": self.key,
             "display_name": self.display_name,
+            "description": self.description,
             "kind": self.kind,
             "enabled": self.enabled,
             "custom": self.custom,
             "output_schema": self.output_schema,
             "weight": self.weight,
+            "skills": list(self.skills),
         }
 
 
@@ -120,6 +124,8 @@ class RoleRegistry:
                 enabled=bool(value.get("enabled", True)),
                 aliases=declared,
                 custom=custom,
+                description=str(value.get("description") or ""),
+                skills=tuple(str(item) for item in (value.get("skills") or ())),
             )
             for alias in declared:
                 target = aliases.get(alias)
