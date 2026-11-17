@@ -50,7 +50,11 @@ class QdrantProvider(Provider):
 
                 api_key = os.environ.get(str(env_name))
         try:
-            client = QdrantClient(url=url, api_key=api_key, timeout=float(self.config.get("timeout", 10)))
+            client = QdrantClient(
+                url=url,
+                api_key=api_key,
+                timeout=float(self.config.get("timeout", 10)),
+            )
         except Exception as exc:
             raise ProviderNotAvailable(f"qdrant 不可达（{url}）：{exc}") from exc
 
@@ -72,9 +76,7 @@ class QdrantProvider(Provider):
 
         scroll_filter = None
         if chosen != candidates[0]:
-            scroll_filter = Filter(
-                must=[FieldCondition(key="code", match=MatchValue(value=code))]
-            )
+            scroll_filter = Filter(must=[FieldCondition(key="code", match=MatchValue(value=code))])
         try:
             points, _ = client.scroll(
                 collection_name=chosen,
