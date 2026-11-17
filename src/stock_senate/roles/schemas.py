@@ -58,8 +58,15 @@ CONFIDENCE_LEVELS = {
 }
 
 
-def _flatten_text_item(item: Any) -> str:
-    """把模型给出的单条要点压成一行文本，保留可读顺序。"""
+def _flatten_text_item(item: Any) -> Any:
+    """把模型给出的单条要点压成一行文本，保留可读顺序。
+
+    已经是契约模型实例的元素必须原样返回：``PlainClaim`` 这类对象所在的字段名
+    同样在 ``TEXT_LIST_FIELDS`` 里，把实例 ``str()`` 成一行文本会让「对象列表」
+    变成「字符串列表」，pydantic 校验直接判 model_type 错误。
+    """
+    if isinstance(item, BaseModel):
+        return item
     if isinstance(item, str):
         return item
     if isinstance(item, dict):
@@ -106,7 +113,9 @@ class StrictModel(BaseModel):
             value = out.get(key)
             if isinstance(value, str):
                 out[key] = [value]
-            elif isinstance(value, list) and any(not isinstance(x, str) for x in value):
+            elif isinstance(value, list) and any(
+                not isinstance(x, (str, BaseModel)) for x in value
+            ):
                 out[key] = [_flatten_text_item(x) for x in value]
 
         return out

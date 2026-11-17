@@ -267,7 +267,9 @@ class RoleLLMResolver:
         self.fallback_chain = list((llm_section.get("fallback") or {}).get("chain") or [])
         self.compression = settings_from_config(config)
         self.budget = budget
-        self._clients: dict[tuple[str, str], Any] = {}
+        # 缓存键含「地址 + 密钥」：同一模型在不同反代/凭据下必须是不同客户端实例。
+        # 键形状允许 2 元组（provider+model）作为旧注入点，故用变长元组。
+        self._clients: dict[tuple[Any, ...], Any] = {}
         self.calls: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------ #
@@ -315,6 +317,11 @@ class RoleLLMResolver:
         cache_key = (target.provider, target.model, api_key or "", base_url)
         if cache_key in self._clients:
             return self._clients[cache_key]
+        # 兼容旧的两元组注入点（测试与外部替换客户端仍按 provider+model 塞缓存）：
+        # 命中时视为「该角色的客户端已被指定」，不再新建真实连接。
+        legacy_key = (target.provider, target.model)
+        if legacy_key in self._clients:
+            return self._clients[legacy_key]
         if provider in _SDK_PROVIDERS:
             raise LLMConfigError(
                 f"provider {target.provider!r} 需要 claude-agent-sdk，当前未安装；"
